@@ -36,6 +36,12 @@ CREATE TABLE IF NOT EXISTS history (
   created_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS barcode_cache (
+  barcode    TEXT PRIMARY KEY,
+  data       TEXT,
+  fetched_at INTEGER NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_items_category ON items(category_id);
 CREATE INDEX IF NOT EXISTS idx_items_location ON items(location_id);
 CREATE INDEX IF NOT EXISTS idx_history_item   ON history(item_id);
@@ -94,6 +100,17 @@ function toId(value) {
   return n;
 }
 
+function toBarcode(value) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const code = String(value).trim();
+  if (!code) return null;
+  if (code.length > 64 || !/^[\x21-\x7E]+$/.test(code)) {
+    throw new ValidationError('Kod kreskowy może zawierać maksymalnie 64 znaki ASCII bez spacji');
+  }
+  return code;
+}
+
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -114,6 +131,7 @@ class Store {
     this.db.exec('PRAGMA foreign_keys = ON;');
     this.db.exec('PRAGMA journal_mode = WAL;');
     this.db.exec(SCHEMA);
+    this.migrate();
     if (seed) this.seedDefaults();
   }
 
@@ -131,6 +149,13 @@ class Store {
       this.db.exec('ROLLBACK');
       throw err;
     }
+  }
+
+  /** Dodaje kolumny wprowadzone w nowszych wersjach do istniejących baz. */
+  migrate() {
+    const cols = this.db.prepare('PRAGMA table_info(items)').all().map((c) => c.name);
+    if (!cols.includes('barcode')) this.db.exec('ALTER TABLE items ADD COLUMN barcode TEXT');
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_items_barcode ON items(barcode)');
   }
 
   seedDefaults() {
@@ -187,12 +212,16 @@ class Store {
 
   // ---------- Zasoby ----------
 
-  listItems({ q, category_id, location_id, status } = {}) {
+  listItems({ q, category_id, location_id, status, barcode } = {}) {
     const where = [];
     const params = [];
     if (q) {
-      where.push('(i.name LIKE ? OR i.notes LIKE ?)');
-      params.push(`%${q}%`, `%${q}%`);
+      where.push('(i.name LIKE ? OR i.notes LIKE ? OR i.barcode = ?)');
+      params.push(`%${q}%`, `%${q}%`, String(q).trim());
+    }
+    if (barcode) {
+      where.push('i.barcode = ?');
+      params.push(toBarcode(barcode));
     }
     if (category_id) {
       where.push('i.category_id = ?');
@@ -238,6 +267,7 @@ class Store {
       expires_at: toDate(input.expires_at),
       unit: input.unit === undefined ? undefined : String(input.unit).trim() || 'szt.',
       notes: input.notes === undefined ? undefined : String(input.notes),
+      barcode: toBarcode(input.barcode),
     };
     for (const [k, v] of Object.entries(map)) if (v !== undefined) out[k] = v;
     return out;
@@ -378,4 +408,4 @@ class Store {
   }
 }
 
-module.exports = { Store, ValidationError, NotFoundError, today, addDays };
+module.exports = { Store, ValidationError, NotFoundError, today, addDays, toBarcode };

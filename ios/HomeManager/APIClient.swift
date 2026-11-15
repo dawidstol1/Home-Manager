@@ -79,6 +79,19 @@ struct APIClient {
 
     func history(_ id: Int) async throws -> [HistoryEntry] { try await get("items/\(id)/history") }
 
+    // MARK: - Skanowanie
+
+    func lookupBarcode(_ code: String) async throws -> BarcodeLookup {
+        try await get("barcode", query: [URLQueryItem(name: "code", value: code)])
+    }
+
+    /// Odczytuje datę ważności z tekstu rozpoznanego na etykiecie (parser po stronie serwera).
+    func parseExpiry(_ text: String) async throws -> String? {
+        struct Body: Encodable { let text: String }
+        let result: ExpiryParseResult = try await send("POST", "expiry/parse", body: Body(text: text))
+        return result.date
+    }
+
     // MARK: - Raporty
 
     func stats() async throws -> Stats { try await get("stats") }

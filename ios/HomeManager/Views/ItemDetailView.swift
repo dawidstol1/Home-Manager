@@ -89,6 +89,11 @@ struct ItemDetailView: View {
                         }
                     }
                 }
+                if let barcode = item.barcode {
+                    LabeledContent("Kod kreskowy") {
+                        Text(barcode).monospacedDigit().textSelection(.enabled)
+                    }
+                }
                 if let price = item.price {
                     LabeledContent("Cena jednostkowa", value: price.pln)
                     LabeledContent("Wartość", value: (price * item.quantity).pln)

@@ -1,6 +1,7 @@
 import SwiftUI
 
 /// Formularz dodawania (`item == nil`) lub edycji zasobu.
+/// `prefill` pozwala wstępnie wypełnić nowy zasób, np. danymi ze skanu kodu kreskowego.
 struct ItemFormView: View {
     let item: Item?
 
@@ -17,13 +18,29 @@ struct ItemFormView: View {
     @State private var hasExpiry = false
     @State private var expiry = Date.now
     @State private var notes = ""
+    @State private var barcode = ""
+    @State private var scanningBarcode = false
+    @State private var scanningExpiry = false
     @State private var saving = false
     @State private var error: String?
 
     private static let units = ["szt.", "kg", "g", "l", "ml", "opak.", "rolka"]
 
-    init(item: Item?) {
+    init(item: Item?, prefill: ItemInput? = nil) {
         self.item = item
+        if item == nil, let prefill {
+            _name = State(initialValue: prefill.name)
+            _categoryId = State(initialValue: prefill.categoryId)
+            _locationId = State(initialValue: prefill.locationId)
+            _quantityText = State(initialValue: prefill.quantity.amount)
+            _unit = State(initialValue: prefill.unit)
+            _notes = State(initialValue: prefill.notes)
+            _barcode = State(initialValue: prefill.barcode ?? "")
+            if let date = prefill.expiresAt.flatMap(DateFormats.day.date(from:)) {
+                _hasExpiry = State(initialValue: true)
+                _expiry = State(initialValue: date)
+            }
+        }
         guard let item else { return }
         _name = State(initialValue: item.name)
         _categoryId = State(initialValue: item.categoryId)
@@ -37,6 +54,7 @@ struct ItemFormView: View {
             _expiry = State(initialValue: date)
         }
         _notes = State(initialValue: item.notes)
+        _barcode = State(initialValue: item.barcode ?? "")
     }
 
     var body: some View {
@@ -91,6 +109,26 @@ struct ItemFormView: View {
                         DatePicker("Ważne do", selection: $expiry, displayedComponents: .date)
                             .environment(\.locale, Locale(identifier: "pl_PL"))
                     }
+                    Button {
+                        scanningExpiry = true
+                    } label: {
+                        Label("Odczytaj datę z etykiety", systemImage: "text.viewfinder")
+                    }
+                }
+
+                Section("Kod kreskowy") {
+                    HStack {
+                        TextField("EAN / kod produktu", text: $barcode)
+                            .keyboardType(.numbersAndPunctuation)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        Button {
+                            scanningBarcode = true
+                        } label: {
+                            Image(systemName: "barcode.viewfinder")
+                        }
+                        .accessibilityLabel("Skanuj kod")
+                    }
                 }
 
                 Section("Notatki") {
@@ -110,6 +148,21 @@ struct ItemFormView: View {
                 }
             }
             .interactiveDismissDisabled(saving)
+            .sheet(isPresented: $scanningBarcode) {
+                BarcodeScannerSheet { code in
+                    barcode = code
+                    Task { await suggestName(for: code) }
+                }
+            }
+            .sheet(isPresented: $scanningExpiry) {
+                ExpiryScannerSheet(
+                    parse: { text in try? await model.api.parseExpiry(text) },
+                    onDate: { date in
+                        expiry = date
+                        withAnimation { hasExpiry = true }
+                    }
+                )
+            }
             .errorAlert($error)
         }
     }
@@ -147,7 +200,18 @@ struct ItemFormView: View {
         input.price = price
         input.expiresAt = hasExpiry ? DateFormats.day.string(from: expiry) : nil
         input.notes = notes
+        let code = barcode.trimmingCharacters(in: .whitespaces)
+        input.barcode = code.isEmpty ? nil : code
         return input
+    }
+
+    /// Po zeskanowaniu kodu podpowiada nazwę, jeśli pole jest jeszcze puste.
+    private func suggestName(for code: String) async {
+        guard name.trimmingCharacters(in: .whitespaces).isEmpty,
+              let lookup = try? await model.api.lookupBarcode(code) else { return }
+        if let suggested = lookup.product?.name ?? lookup.items.first?.name {
+            name = suggested
+        }
     }
 
     private func save() {

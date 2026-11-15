@@ -14,6 +14,7 @@ struct Item: Codable, Identifiable, Hashable {
     var price: Double?
     var expiresAt: String?
     var notes: String
+    var barcode: String?
     var createdAt: String?
     var updatedAt: String?
 
@@ -56,6 +57,7 @@ struct ItemInput: Encodable {
     var price: Double?
     var expiresAt: String?
     var notes: String = ""
+    var barcode: String?
 
     init() {}
 
@@ -69,10 +71,11 @@ struct ItemInput: Encodable {
         price = item.price
         expiresAt = item.expiresAt
         notes = item.notes
+        barcode = item.barcode
     }
 
     private enum CodingKeys: String, CodingKey {
-        case name, categoryId, locationId, quantity, unit, minQuantity, price, expiresAt, notes
+        case name, categoryId, locationId, quantity, unit, minQuantity, price, expiresAt, notes, barcode
     }
 
     func encode(to encoder: Encoder) throws {
@@ -86,7 +89,31 @@ struct ItemInput: Encodable {
         try c.encode(price, forKey: .price)
         try c.encode(expiresAt, forKey: .expiresAt)
         try c.encode(notes, forKey: .notes)
+        try c.encode(barcode, forKey: .barcode)
     }
+}
+
+// MARK: - Skanowanie
+
+/// Podpowiedź z bazy produktów (Open Food Facts) dla nieznanego kodu.
+struct ProductHint: Decodable, Hashable {
+    let barcode: String
+    let name: String
+    let brand: String?
+    let quantity: String?
+    let categoryHint: String?
+}
+
+/// Odpowiedź `/api/barcode/:code`.
+struct BarcodeLookup: Decodable {
+    let barcode: String
+    let items: [Item]
+    let product: ProductHint?
+}
+
+/// Odpowiedź `/api/expiry/parse`.
+struct ExpiryParseResult: Decodable {
+    let date: String?
 }
 
 /// Kategoria lub lokalizacja.

@@ -3,6 +3,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
+const { parseExpiry } = require('./expiry');
+const { createProductLookup } = require('./products');
+const { toBarcode, ValidationError } = require('./db');
+
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -69,8 +73,31 @@ function serveStatic(req, res, pathname) {
  * Tabela tras: [metoda, wzorzec, handler(ctx)].
  * Handler zwraca obiekt (200), { status, body } lub undefined (204).
  */
-function buildRoutes(store) {
+function buildRoutes(store, lookupProduct) {
   return [
+    // Skanowanie: znane zasoby z tym kodem + podpowiedź z bazy produktów, gdy brak dopasowań.
+    // Kod w ścieżce (/api/barcode/5901234123457) lub w zapytaniu (/api/barcode?code=...).
+    [
+      'GET',
+      /^\/api\/barcode(?:\/([^/]+))?$/,
+      async ({ m, query }) => {
+        let raw = query.get('code');
+        if (m[1] !== undefined) {
+          try {
+            raw = decodeURIComponent(m[1]);
+          } catch {
+            throw new ValidationError('Nieprawidłowy kod kreskowy');
+          }
+        }
+        const barcode = toBarcode(raw ?? '');
+        if (!barcode) throw new ValidationError('Podaj kod kreskowy');
+        const items = store.listItems({ barcode });
+        const product = items.length ? null : await lookupProduct(barcode);
+        return { barcode, items, product };
+      },
+    ],
+    ['POST', /^\/api\/expiry\/parse$/, ({ body }) => parseExpiry(String(body.text ?? '').slice(0, 5000))],
+
     ['GET', /^\/api\/stats$/, () => store.stats()],
     ['GET', /^\/api\/shopping-list$/, () => store.shoppingList()],
     ['GET', /^\/api\/export$/, () => store.exportAll()],
@@ -91,8 +118,10 @@ function buildRoutes(store) {
   ];
 }
 
-function createApp(store) {
-  const routes = buildRoutes(store);
+function createApp(store, { productLookup } = {}) {
+  const lookup =
+    productLookup ?? createProductLookup(store, { enabled: process.env.PRODUCT_LOOKUP !== 'off' });
+  const routes = buildRoutes(store, lookup);
 
   return async function handler(req, res) {
     const url = new URL(req.url, 'http://localhost');
@@ -110,7 +139,7 @@ function createApp(store) {
 
     try {
       const body = ['POST', 'PUT', 'PATCH'].includes(req.method) ? await readJson(req) : {};
-      const result = route[2]({ m: pathname.match(route[1]), body, query: url.searchParams });
+      const result = await route[2]({ m: pathname.match(route[1]), body, query: url.searchParams });
       if (result === undefined) return send(res, 204);
       if (result && typeof result === 'object' && 'status' in result && 'body' in result) {
         return send(res, result.status, result.body);

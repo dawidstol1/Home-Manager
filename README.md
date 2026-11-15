@@ -13,6 +13,8 @@ ile zostało, kiedy traci ważność i co trzeba dokupić.
 - **Kategorie i lokalizacje** – edytowalne słowniki (z domyślnym zestawem na start)
 - **Kopia zapasowa** – eksport/import wszystkich danych do pliku JSON
 - Responsywny interfejs, tryb ciemny zgodny z ustawieniami systemu
+- **Skanowanie etykiet** – kod kreskowy (EAN/UPC/QR…) rozpoznaje znany produkt (szybkie +1/−1),
+  a nowy podpowiada nazwę z bazy Open Food Facts; datę ważności można odczytać ze zdjęcia etykiety (OCR)
 - **iOS:** natywna aplikacja SwiftUI (`ios/`) oraz PWA do zainstalowania z Safari
 
 ## Wymagania
@@ -35,6 +37,35 @@ Zmienne środowiskowe:
 | `PORT`    | `3000`                      | Port serwera               |
 | `HOST`    | `127.0.0.1`                 | Adres nasłuchu (`0.0.0.0`, by udostępnić w sieci domowej) |
 | `DB_FILE` | `data/home-manager.db`      | Ścieżka do pliku bazy SQLite |
+| `PRODUCT_LOOKUP` | włączone             | `off` wyłącza podpowiedzi nazw z Open Food Facts |
+
+## Skanowanie etykiet
+
+**Kod kreskowy** – przycisk „📷 Skanuj” (web) lub ikona kodu (iOS) na liście zasobów:
+
+- kod przypisany już do zasobu → okno z tą pozycją i przyciskami −/+ (np. zużycie przy wyjmowaniu z szafki),
+- nowy kod → formularz nowego zasobu z wpisanym kodem i, jeśli produkt jest w bazie
+  [Open Food Facts](https://world.openfoodfacts.org), z podpowiedzianą nazwą i kategorią.
+
+Kod można też zeskanować bezpośrednio w formularzu (pole „Kod kreskowy”).
+
+**Data ważności (OCR)** – w formularzu przycisk „📷 Z etykiety” (web) / „Odczytaj datę z etykiety” (iOS).
+Rozpoznany tekst trafia do parsera na serwerze, który rozumie m.in. `12.05.2027`, `12/05/27`, `2027-05-12`,
+`05.2027`, `EXP 05/27`, `12 MAJ 2027`, preferuje daty przy „Najlepiej spożyć przed / Należy spożyć do / EXP / BB”
+i pomija daty przy „Data produkcji / LOT”. Odczytaną datę zawsze można poprawić przed zapisaniem.
+
+| | Web / PWA | iOS (natywnie) |
+|---|---|---|
+| Kod kreskowy | kamera na żywo (HTTPS lub `localhost`), zdjęcie z aparatu (działa też przez HTTP), wpisanie ręczne | VisionKit na żywo + wpisanie ręczne |
+| Data ważności | zdjęcie etykiety → Tesseract.js w przeglądarce | rozpoznawanie tekstu na żywo (VisionKit) |
+
+Uwagi:
+
+- Do Open Food Facts wysyłany jest **tylko numer kodu kreskowego** (i tylko dla kodów, których nie ma jeszcze
+  w Twojej bazie); wyniki są zapamiętywane lokalnie. Wyłączenie: `PRODUCT_LOOKUP=off`.
+- OCR w przeglądarce pobiera przy pierwszym użyciu ok. 5 MB (Tesseract.js z cdn.jsdelivr.net) – potem
+  przeglądarka trzyma to w pamięci podręcznej. Rozpoznawanie odbywa się na urządzeniu, zdjęcie nigdzie nie jest wysyłane.
+- Skanowanie na żywo w iOS wymaga iPhone'a XS lub nowszego; w symulatorze dostępne jest tylko wpisanie ręczne.
 
 ## iOS
 
@@ -88,10 +119,14 @@ przez zwykłe HTTP w sieci lokalnej aplikacja działa, ale tylko online.
 
 ```
 src/
-  db.js       – schemat bazy, walidacja i logika (klasa Store)
+  db.js       – schemat bazy, migracje, walidacja i logika (klasa Store)
+  products.js – podpowiedzi produktów po kodzie (Open Food Facts + cache)
+  expiry.js   – odczyt daty ważności z tekstu etykiety
   app.js      – routing REST API i serwowanie plików statycznych
   server.js   – punkt startowy serwera HTTP
 public/       – interfejs (HTML, CSS, JS bez frameworków) + manifest PWA i service worker
+  scanner.js  – skanowanie kodów (BarcodeDetector / ZXing) i OCR dat (Tesseract.js)
+  vendor/     – dołączona biblioteka ZXing (Apache-2.0)
 ios/          – natywna aplikacja iOS (SwiftUI)
 test/         – testy API (node:test)
 data/         – plik bazy danych (ignorowany przez git)
@@ -101,13 +136,15 @@ data/         – plik bazy danych (ignorowany przez git)
 
 | Metoda | Ścieżka | Opis |
 |--------|---------|------|
-| GET | `/api/items?q=&category_id=&location_id=&status=low\|expiring\|expired` | Lista zasobów |
+| GET | `/api/items?q=&category_id=&location_id=&status=low\|expiring\|expired&barcode=` | Lista zasobów |
 | POST | `/api/items` | Dodanie zasobu |
 | GET / PUT / PATCH / DELETE | `/api/items/:id` | Odczyt / edycja / usunięcie |
 | POST | `/api/items/:id/adjust` | Zmiana stanu `{ "delta": -1, "note": "..." }` |
 | GET | `/api/items/:id/history` | Historia zmian stanu |
 | GET / POST | `/api/categories`, `/api/locations` | Słowniki |
 | DELETE | `/api/categories/:id`, `/api/locations/:id` | Usunięcie pozycji słownika |
+| GET | `/api/barcode/:kod` lub `/api/barcode?code=` | Zasoby z danym kodem + podpowiedź produktu |
+| POST | `/api/expiry/parse` | Data ważności z tekstu etykiety `{ "text": "..." }` → `{ "date": "2027-05-12" }` |
 | GET | `/api/stats` | Statystyki pulpitu |
 | GET | `/api/shopping-list` | Lista zakupów |
 | GET / POST | `/api/export`, `/api/import` | Kopia zapasowa JSON |

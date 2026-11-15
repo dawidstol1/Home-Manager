@@ -159,12 +159,12 @@ async function loadItems() {
   }).join('');
 }
 
-function openItemDialog(item = null) {
+function openItemDialog(item = null, prefill = {}) {
   const form = $('#item-form');
   form.reset();
   $('#item-error').hidden = true;
   $('#item-dialog-title').textContent = item ? 'Edytuj zasób' : 'Nowy zasób';
-  const values = item ?? { quantity: 1, unit: 'szt.', min_quantity: 0 };
+  const values = item ?? { quantity: 1, unit: 'szt.', min_quantity: 0, ...prefill };
   for (const el of form.elements) {
     if (el.name && el.name in values) el.value = values[el.name] ?? '';
   }
@@ -224,6 +224,106 @@ async function onItemAction(e) {
   } catch (err) {
     toast(err.message);
   }
+}
+
+// ---------- Skanowanie etykiet ----------
+
+/** Skanuje kod: znany produkt → szybkie akcje, nowy → formularz z podpowiedzią. */
+async function scanFlow() {
+  const code = await Scanner.scanBarcode();
+  if (!code) return;
+  try {
+    const res = await api(`/barcode/${encodeURIComponent(code)}`);
+    if (res.items.length) {
+      showScanResult(res.barcode, res.items);
+    } else {
+      openNewFromScan(res.barcode, res.product);
+    }
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+function openNewFromScan(barcode, product) {
+  const prefill = { barcode };
+  if (product) {
+    prefill.name = product.name;
+    const cat = state.categories.find((c) => c.name === product.category_hint);
+    if (cat) prefill.category_id = cat.id;
+    if (product.quantity) prefill.notes = `Opakowanie: ${product.quantity}`;
+    toast(`Rozpoznano: ${product.name}`);
+  } else {
+    toast('Nowy kod – uzupełnij nazwę produktu');
+  }
+  openItemDialog(null, prefill);
+}
+
+function showScanResult(barcode, items) {
+  const dialog = $('#scan-result-dialog');
+  $('#scan-result-title').textContent = items.length === 1 ? items[0].name : `Znaleziono ${items.length} pozycje`;
+  $('#scan-result-code').textContent = `Kod: ${barcode}`;
+  const render = (list) => {
+    $('#scan-result-list').innerHTML = list.map((i) => `
+      <li data-id="${i.id}">
+        <span><strong>${esc(i.name)}</strong><br>
+          <span class="muted">${esc(i.location ?? 'bez lokalizacji')} · ${fmtNum(i.quantity)} ${esc(i.unit)}</span></span>
+        <span class="row">
+          <button class="btn sm" data-scan-act="dec" title="Zużyj 1" ${i.quantity < 1 ? 'disabled' : ''}>−</button>
+          <button class="btn sm" data-scan-act="inc" title="Dodaj 1">+</button>
+          <button class="btn sm" data-scan-act="edit">Edytuj</button>
+        </span>
+      </li>`).join('');
+  };
+  render(items);
+
+  $('#scan-result-list').onclick = async (e) => {
+    const btn = e.target.closest('button[data-scan-act]');
+    if (!btn) return;
+    const id = Number(btn.closest('li').dataset.id);
+    try {
+      if (btn.dataset.scanAct === 'edit') {
+        dialog.close();
+        openItemDialog(await api(`/items/${id}`));
+        return;
+      }
+      const updated = await api(`/items/${id}/adjust`, {
+        method: 'POST',
+        body: { delta: btn.dataset.scanAct === 'inc' ? 1 : -1, note: 'Skan' },
+      });
+      items = items.map((i) => (i.id === id ? updated : i));
+      render(items);
+      toast(`${updated.name}: ${fmtNum(updated.quantity)} ${updated.unit}`);
+      refresh();
+    } catch (err) {
+      toast(err.message);
+    }
+  };
+  $('#scan-result-new').onclick = () => {
+    dialog.close();
+    openItemDialog(null, { barcode, name: items[0]?.name ?? '', category_id: items[0]?.category_id ?? '' });
+  };
+  dialog.showModal();
+}
+
+async function scanBarcodeIntoForm() {
+  const code = await Scanner.scanBarcode();
+  if (!code) return;
+  const form = $('#item-form');
+  form.elements.barcode.value = code;
+  if (form.elements.name.value.trim()) return;
+  try {
+    const res = await api(`/barcode/${encodeURIComponent(code)}`);
+    const name = res.product?.name ?? res.items[0]?.name;
+    if (name) {
+      form.elements.name.value = name;
+      toast(`Rozpoznano: ${name}`);
+    }
+  } catch { /* podpowiedź nazwy jest opcjonalna */ }
+}
+
+async function scanExpiryIntoForm() {
+  const date = await Scanner.scanExpiry((text) => api('/expiry/parse', { method: 'POST', body: { text } }));
+  if (date) $('#item-form').elements.expires_at.value = date;
 }
 
 // ---------- Lista zakupów ----------
@@ -345,6 +445,9 @@ function debounce(fn, ms) {
 function init() {
   $$('.tab').forEach((t) => t.addEventListener('click', () => showView(t.dataset.view)));
   $('#btn-add').addEventListener('click', () => openItemDialog());
+  $('#btn-scan').addEventListener('click', scanFlow);
+  $('#form-scan-barcode').addEventListener('click', scanBarcodeIntoForm);
+  $('#form-scan-expiry').addEventListener('click', scanExpiryIntoForm);
   $('#item-form').addEventListener('submit', saveItem);
   $$('dialog [data-close]').forEach((b) => b.addEventListener('click', () => b.closest('dialog').close()));
   $('#items-body').addEventListener('click', onItemAction);

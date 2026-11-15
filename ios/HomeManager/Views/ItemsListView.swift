@@ -6,8 +6,26 @@ struct ItemsListView: View {
     @State private var items: [Item] = []
     @State private var filter = ItemFilter()
     @State private var loaded = false
-    @State private var showingForm = false
+    @State private var sheet: ActiveSheet?
+    @State private var pendingCode: String?
+    @State private var pendingNewItem: ItemInput?
+    @State private var resolvingScan = false
     @State private var error: String?
+
+    /// Jeden arkusz naraz: nowy zasób, skaner albo wynik skanowania.
+    enum ActiveSheet: Identifiable {
+        case newItem(ItemInput?)
+        case scanner
+        case scanResult(barcode: String, items: [Item])
+
+        var id: String {
+            switch self {
+            case .newItem: "new"
+            case .scanner: "scanner"
+            case let .scanResult(barcode, _): "result-\(barcode)"
+            }
+        }
+    }
 
     private struct LoadKey: Equatable {
         let filter: ItemFilter
@@ -27,12 +45,30 @@ struct ItemsListView: View {
             .navigationDestination(for: Int.self) { ItemDetailView(itemId: $0) }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { filterMenu }
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showingForm = true } label: { Label("Dodaj", systemImage: "plus") }
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button { sheet = .scanner } label: { Label("Skanuj", systemImage: "barcode.viewfinder") }
+                        .disabled(!model.isConfigured || resolvingScan)
+                    Button { sheet = .newItem(nil) } label: { Label("Dodaj", systemImage: "plus") }
                         .disabled(!model.isConfigured)
                 }
             }
-            .sheet(isPresented: $showingForm) { ItemFormView(item: nil) }
+            .overlay {
+                if resolvingScan {
+                    ProgressView("Szukam produktu…")
+                        .padding()
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                }
+            }
+            .sheet(item: $sheet, onDismiss: afterSheetDismissed) { sheet in
+                switch sheet {
+                case let .newItem(prefill):
+                    ItemFormView(item: nil, prefill: prefill)
+                case .scanner:
+                    BarcodeScannerSheet { code in pendingCode = code }
+                case let .scanResult(barcode, items):
+                    ScanResultView(barcode: barcode, items: items) { prefill in pendingNewItem = prefill }
+                }
+            }
             .task(id: LoadKey(filter: filter, revision: model.revision)) {
                 // Krótka zwłoka – nie odpytujemy serwera przy każdym znaku wyszukiwania.
                 if loaded { try? await Task.sleep(for: .milliseconds(250)) }
@@ -97,6 +133,41 @@ struct ItemsListView: View {
         } label: {
             let active = filter != ItemFilter(query: filter.query)
             Label("Filtry", systemImage: active ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+        }
+    }
+
+    // MARK: - Skanowanie
+
+    /// Kolejny arkusz otwieramy dopiero po zamknięciu poprzedniego.
+    private func afterSheetDismissed() {
+        if let code = pendingCode {
+            pendingCode = nil
+            Task { await resolveScan(code) }
+        } else if let prefill = pendingNewItem {
+            pendingNewItem = nil
+            sheet = .newItem(prefill)
+        }
+    }
+
+    private func resolveScan(_ code: String) async {
+        resolvingScan = true
+        defer { resolvingScan = false }
+        do {
+            let result = try await model.api.lookupBarcode(code)
+            if !result.items.isEmpty {
+                sheet = .scanResult(barcode: result.barcode, items: result.items)
+                return
+            }
+            var prefill = ItemInput()
+            prefill.barcode = result.barcode
+            if let product = result.product {
+                prefill.name = product.name
+                prefill.categoryId = model.categories.first { $0.name == product.categoryHint }?.id
+                if let quantity = product.quantity { prefill.notes = "Opakowanie: \(quantity)" }
+            }
+            sheet = .newItem(prefill)
+        } catch {
+            self.error = error.localizedDescription
         }
     }
 

@@ -2,11 +2,11 @@
 
 // Service worker: interfejs działa offline, a ostatnio pobrane dane API
 // są dostępne do podglądu bez połączenia (tylko odczyt).
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL_CACHE = `shell-${VERSION}`;
 const API_CACHE = `api-${VERSION}`;
 const SHELL = [
-  '/', '/index.html', '/styles.css', '/app.js', '/manifest.webmanifest',
+  '/', '/index.html', '/styles.css', '/app.js', '/scanner.js', '/vendor/zxing.min.js', '/manifest.webmanifest',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png',
 ];
 
