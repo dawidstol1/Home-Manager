@@ -144,10 +144,10 @@ async function loadItems() {
           <div class="item-name">${esc(i.name)}</div>
           ${i.notes ? `<div class="item-notes">${esc(i.notes)}</div>` : ''}
         </td>
-        <td>${esc(i.category ?? '—')}</td>
-        <td>${esc(i.location ?? '—')}</td>
+        <td class="${i.category ? '' : 'nil'}">${esc(i.category ?? '—')}</td>
+        <td class="${i.location ? '' : 'nil'}">${esc(i.location ?? '—')}</td>
         <td class="num">${fmtNum(i.quantity)} ${esc(i.unit)} ${low ? '<span class="badge warn">mało</span>' : ''}</td>
-        <td>${expiryBadge(i.expires_at)}</td>
+        <td class="${i.expires_at ? '' : 'nil'}">${expiryBadge(i.expires_at)}</td>
         <td class="actions">
           <button class="btn sm" data-act="dec" title="Zużyj 1">−</button>
           <button class="btn sm" data-act="inc" title="Dodaj 1">+</button>
@@ -364,3 +364,7 @@ function init() {
 }
 
 init();
+
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+  navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('Service worker:', e));
+}

@@ -11,6 +11,8 @@ const MIME = {
   '.svg': 'image/svg+xml',
   '.json': 'application/json; charset=utf-8',
   '.ico': 'image/x-icon',
+  '.png': 'image/png',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
 };
 const MAX_BODY = 5 * 1024 * 1024;
 
@@ -56,7 +58,10 @@ function serveStatic(req, res, pathname) {
   if (!file.startsWith(PUBLIC_DIR + path.sep)) return send(res, 403, 'Forbidden');
   fs.readFile(file, (err, data) => {
     if (err) return send(res, 404, 'Not found');
-    send(res, 200, data, { 'Content-Type': MIME[path.extname(file)] ?? 'application/octet-stream' });
+    const headers = { 'Content-Type': MIME[path.extname(file)] ?? 'application/octet-stream' };
+    // sw.js nie może być długo cache'owany, inaczej aktualizacje nie dotrą do klientów.
+    if (path.basename(file) === 'sw.js') headers['Cache-Control'] = 'no-cache';
+    send(res, 200, data, headers);
   });
 }
 
