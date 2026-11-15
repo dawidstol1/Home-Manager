@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2f6fde">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Zasoby">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <title>Manager zasobów domowych</title>
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>🏠 Manager zasobów domowych</h1>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-view="dashboard" role="tab">Pulpit</button>
+      <button class="tab" data-view="items" role="tab">Zasoby</button>
+      <button class="tab" data-view="shopping" role="tab">Lista zakupów</button>
+      <button class="tab" data-view="settings" role="tab">Ustawienia</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- PULPIT -->
+    <section id="view-dashboard" class="view active">
+      <div class="stats" id="stats"></div>
+      <div class="grid2">
+        <div class="card">
+          <h2>⚠️ Kończące się zapasy</h2>
+          <ul class="list" id="dash-low"></ul>
+        </div>
+        <div class="card">
+          <h2>⏰ Termin ważności (≤ 7 dni)</h2>
+          <ul class="list" id="dash-expiring"></ul>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Zasoby wg kategorii</h2>
+        <div id="dash-categories" class="bars"></div>
+      </div>
+    </section>
+
+    <!-- ZASOBY -->
+    <section id="view-items" class="view">
+      <div class="toolbar">
+        <input type="search" id="f-q" placeholder="Szukaj…" aria-label="Szukaj">
+        <select id="f-category" aria-label="Kategoria"><option value="">Wszystkie kategorie</option></select>
+        <select id="f-location" aria-label="Lokalizacja"><option value="">Wszystkie lokalizacje</option></select>
+        <select id="f-status" aria-label="Status">
+          <option value="">Każdy status</option>
+          <option value="low">Niski stan</option>
+          <option value="expiring">Wkrótce traci ważność</option>
+          <option value="expired">Przeterminowane</option>
+        </select>
+        <button class="btn" id="btn-scan">📷 Skanuj</button>
+        <button class="btn primary" id="btn-add">+ Dodaj zasób</button>
+      </div>
+      <div class="table-wrap">
+        <table class="items">
+          <thead>
+            <tr>
+              <th>Nazwa</th><th>Kategoria</th><th>Lokalizacja</th>
+              <th class="num">Ilość</th><th>Ważność</th><th class="actions">Akcje</th>
+            </tr>
+          </thead>
+          <tbody id="items-body"></tbody>
+        </table>
+        <p class="empty" id="items-empty" hidden>Brak zasobów spełniających kryteria.</p>
+      </div>
+    </section>
+
+    <!-- LISTA ZAKUPÓW -->
+    <section id="view-shopping" class="view">
+      <div class="card">
+        <div class="card-head">
+          <h2>🛒 Do kupienia</h2>
+          <button class="btn" id="btn-copy-shopping">Kopiuj listę</button>
+        </div>
+        <p class="muted">Pozycje, których stan spadł do poziomu minimalnego lub niżej.</p>
+        <ul class="list shopping" id="shopping-list"></ul>
+      </div>
+    </section>
+
+    <!-- USTAWIENIA -->
+    <section id="view-settings" class="view">
+      <div class="grid2">
+        <div class="card">
+          <h2>Kategorie</h2>
+          <form class="inline-form" data-dict="categories">
+            <input name="name" placeholder="Nowa kategoria" required>
+            <button class="btn primary">Dodaj</button>
+          </form>
+          <ul class="list" id="dict-categories"></ul>
+        </div>
+        <div class="card">
+          <h2>Lokalizacje</h2>
+          <form class="inline-form" data-dict="locations">
+            <input name="name" placeholder="Nowa lokalizacja" required>
+            <button class="btn primary">Dodaj</button>
+          </form>
+          <ul class="list" id="dict-locations"></ul>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Kopia zapasowa</h2>
+        <p class="muted">Eksport zapisuje wszystkie dane do pliku JSON. Import <strong>zastępuje</strong> bieżące dane.</p>
+        <div class="row">
+          <button class="btn" id="btn-export">Eksportuj JSON</button>
+          <label class="btn">Importuj JSON<input type="file" id="import-file" accept="application/json" hidden></label>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Formularz zasobu -->
+  <dialog id="item-dialog">
+    <form id="item-form" method="dialog">
+      <h2 id="item-dialog-title">Nowy zasób</h2>
+      <input type="hidden" name="id">
+      <label class="full">Nazwa*<input name="name" required maxlength="200"></label>
+      <label>Kategoria<select name="category_id"></select></label>
+      <label>Lokalizacja<select name="location_id"></select></label>
+      <label>Ilość<input name="quantity" type="number" min="0" step="any" value="1"></label>
+      <label>Jednostka<input name="unit" value="szt." list="units"></label>
+      <label>Stan minimalny<input name="min_quantity" type="number" min="0" step="any" value="0"></label>
+      <label>Cena jedn. (zł)<input name="price" type="number" min="0" step="0.01"></label>
+      <label class="full">Kod kreskowy
+        <span class="input-with-btn">
+          <input name="barcode" inputmode="numeric" autocomplete="off" maxlength="64" placeholder="EAN / kod produktu">
+          <button type="button" class="btn" id="form-scan-barcode" title="Skanuj kod">📷</button>
+        </span>
+      </label>
+      <label class="full">Data ważności
+        <span class="input-with-btn">
+          <input name="expires_at" type="date">
+          <button type="button" class="btn" id="form-scan-expiry" title="Odczytaj datę z etykiety">📷 Z etykiety</button>
+        </span>
+      </label>
+      <label class="full">Notatki<textarea name="notes" rows="2"></textarea></label>
+      <p class="form-error" id="item-error" hidden></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn" data-close>Anuluj</button>
+        <button type="submit" class="btn primary" value="save">Zapisz</button>
+      </div>
+    </form>
+    <datalist id="units">
+      <option value="szt."><option value="kg"><option value="g"><option value="l"><option value="ml"><option value="opak."><option value="rolka">
+    </datalist>
+  </dialog>
+
+  <!-- Skaner kodów kreskowych -->
+  <dialog id="scan-dialog">
+    <h2>Skanuj kod kreskowy</h2>
+    <div class="scan-live" id="scan-live" hidden>
+      <video id="scan-video" playsinline muted></video>
+      <div class="scan-frame" aria-hidden="true"></div>
+    </div>
+    <p class="muted" id="scan-hint"></p>
+    <div class="row">
+      <label class="btn primary">📷 Zrób zdjęcie kodu<input type="file" accept="image/*" capture="environment" id="scan-photo" hidden></label>
+    </div>
+    <form id="scan-manual" class="inline-form scan-manual">
+      <input name="code" placeholder="…lub wpisz kod ręcznie" inputmode="numeric" autocomplete="off">
+      <button class="btn">OK</button>
+    </form>
+    <p class="form-error" id="scan-error" hidden></p>
+    <div class="dialog-actions"><button class="btn" data-close>Anuluj</button></div>
+  </dialog>
+
+  <!-- Wynik skanowania: znane zasoby -->
+  <dialog id="scan-result-dialog">
+    <h2 id="scan-result-title">Znaleziono</h2>
+    <p class="muted" id="scan-result-code"></p>
+    <ul class="list" id="scan-result-list"></ul>
+    <div class="dialog-actions">
+      <button class="btn" id="scan-result-new">Dodaj jako nowy</button>
+      <button class="btn primary" data-close>Gotowe</button>
+    </div>
+  </dialog>
+
+  <!-- OCR daty ważności -->
+  <dialog id="ocr-dialog">
+    <h2>Data ważności z etykiety</h2>
+    <p class="muted">Zrób wyraźne zdjęcie fragmentu etykiety z datą („Najlepiej spożyć przed…”, „EXP”).</p>
+    <label class="btn primary">📷 Zrób zdjęcie etykiety<input type="file" accept="image/*" capture="environment" id="ocr-photo" hidden></label>
+    <img id="ocr-preview" class="ocr-preview" alt="Zdjęcie etykiety" hidden>
+    <p class="muted" id="ocr-status" role="status"></p>
+    <div id="ocr-result" hidden>
+      <label class="ocr-date-label">Odczytana data <input type="date" id="ocr-date"></label>
+      <details><summary>Rozpoznany tekst</summary><pre id="ocr-text"></pre></details>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn" data-close>Anuluj</button>
+      <button class="btn primary" id="ocr-use" disabled>Użyj daty</button>
+    </div>
+  </dialog>
+
+  <!-- Historia -->
+  <dialog id="history-dialog">
+    <h2 id="history-title">Historia</h2>
+    <ul class="list" id="history-list"></ul>
+    <div class="dialog-actions"><button class="btn" data-close>Zamknij</button></div>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="scanner.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

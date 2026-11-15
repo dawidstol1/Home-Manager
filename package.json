@@ -1,0 +1,16 @@
+{
+  "name": "home-manager",
+  "version": "1.0.0",
+  "description": "Manager zasobów domowych – ewidencja zapasów, lokalizacji, terminów ważności i listy zakupów",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch src/server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test \"test/**/*.test.js\""
+  },
+  "license": "MIT"
+}
