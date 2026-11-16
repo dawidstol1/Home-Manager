@@ -3,7 +3,8 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { Store, addDays, today } = require('../src/db');
+const { addDays, today } = require('../src/db');
+const { openTestStore, closeTestStore } = require('./helpers');
 const { createApp } = require('../src/app');
 
 let server;
@@ -11,15 +12,15 @@ let base;
 let store;
 
 before(async () => {
-  store = new Store(':memory:');
+  store = await openTestStore();
   server = http.createServer(createApp(store));
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${server.address().port}`;
 });
 
-after(() => {
+after(async () => {
   server.close();
-  store.close();
+  await closeTestStore(store);
 });
 
 async function req(method, path, body) {

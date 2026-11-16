@@ -6,7 +6,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { Store } = require('../src/db');
+const { openTestStore, closeTestStore } = require('./helpers');
 const { createApp } = require('../src/app');
 
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1, 0xff, 0xd9]);
@@ -21,7 +21,7 @@ const downloads = [];
 
 before(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hm-img-'));
-  store = new Store(':memory:');
+  store = await openTestStore();
   const productLookup = async (code) => PRODUCTS[code] ?? null;
   const imageFetch = async (url) => {
     downloads.push(url);
@@ -32,9 +32,9 @@ before(async () => {
   base = `http://127.0.0.1:${server.address().port}`;
 });
 
-after(() => {
+after(async () => {
   server.close();
-  store.close();
+  await closeTestStore(store);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

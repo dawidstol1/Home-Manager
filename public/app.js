@@ -57,6 +57,23 @@ function emptyLi(text) {
   return `<li class="empty-li">${esc(text)}</li>`;
 }
 
+// ---------- Układ listy (kafelki / tabela) ----------
+
+function getLayout() {
+  try { return localStorage.getItem('hm-layout') === 'table' ? 'table' : 'tiles'; } catch { return 'tiles'; }
+}
+function setLayout(layout) {
+  try { localStorage.setItem('hm-layout', layout); } catch { /* np. tryb prywatny */ }
+  applyLayout();
+  loadItems().catch((e) => toast(e.message));
+}
+function applyLayout() {
+  const layout = getLayout();
+  $('#items-tiles').hidden = layout !== 'tiles';
+  $('#items-table').hidden = layout !== 'table';
+  $$('[data-layout]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.layout === layout)));
+}
+
 // ---------- Nawigacja ----------
 
 function showView(name) {
@@ -69,6 +86,7 @@ function showView(name) {
 
 function refresh() {
   const views = { dashboard: loadDashboard, items: loadItems, shopping: loadShopping, settings: loadSettings };
+  updateShopBadge();
   return views[state.currentView]().catch((e) => toast(e.message));
 }
 
@@ -86,6 +104,27 @@ async function loadDicts() {
   fill($('#f-location'), state.locations, 'Wszystkie lokalizacje');
   fill($('#item-form [name=category_id]'), state.categories, '— brak —');
   fill($('#item-form [name=location_id]'), state.locations, '— brak —');
+  renderLocationChips();
+}
+
+/** Szybki wybór miejsca: Wszystkie / Kuchnia / Spiżarnia… z liczbą produktów. */
+function renderLocationChips() {
+  const current = $('#f-location').value;
+  const total = state.locations.reduce((s, l) => s + Number(l.item_count || 0), 0);
+  const chip = (id, label, count) =>
+    `<button type="button" class="chip-btn" data-loc="${id}" aria-pressed="${String(String(id) === current)}">${esc(label)}${count != null ? ` <span class="chip-count">${count}</span>` : ''}</button>`;
+  $('#loc-chips').innerHTML = chip('', 'Wszystkie', null) +
+    state.locations.filter((l) => Number(l.item_count) > 0 || String(l.id) === current).map((l) => chip(l.id, l.name, l.item_count)).join('');
+  if (!total) $('#loc-chips').innerHTML = '';
+}
+
+async function updateShopBadge() {
+  try {
+    const { low_stock: n } = await api('/stats');
+    const b = $('#shop-badge');
+    b.textContent = n;
+    b.hidden = !n;
+  } catch { /* licznik jest tylko podpowiedzią */ }
 }
 
 // ---------- Pulpit ----------
@@ -135,6 +174,29 @@ async function loadItems() {
 
   const items = await api(`/items?${params}`);
   $('#items-empty').hidden = items.length > 0;
+  $$('#loc-chips [data-loc]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.loc === $('#f-location').value)));
+  $('#items-tiles').innerHTML = items.map((i) => {
+    const low = i.min_quantity > 0 && i.quantity <= i.min_quantity;
+    const expired = i.expires_at && daysUntil(i.expires_at) < 0;
+    const soon = i.expires_at && !expired && daysUntil(i.expires_at) <= 7;
+    return `
+      <article class="tile ${expired ? 'expired' : low ? 'low' : ''}" data-id="${i.id}">
+        <button type="button" class="tile-photo" data-act="edit" aria-label="Edytuj ${esc(i.name)}">${thumb(i, 'tile-img')}</button>
+        <div class="tile-body">
+          <h3 class="tile-name item-name">${esc(i.name)}</h3>
+          <div class="tile-meta">
+            ${i.location ? `<span>${esc(i.location)}</span>` : ''}
+            ${expired ? '<span class="badge danger">po terminie</span>' : soon ? `<span class="badge warn">${daysUntil(i.expires_at) === 0 ? 'ważne dziś' : `ważne ${daysUntil(i.expires_at)} d.`}</span>` : ''}
+            ${low ? '<span class="badge warn">mało</span>' : ''}
+          </div>
+          <div class="tile-qty">
+            <button class="btn sm qty-btn" data-act="dec" aria-label="Zużyj 1" ${i.quantity < 1 ? 'disabled' : ''}>−</button>
+            <span class="amount">${fmtNum(i.quantity)} ${esc(i.unit)}</span>
+            <button class="btn sm qty-btn" data-act="inc" aria-label="Dodaj 1">+</button>
+          </div>
+        </div>
+      </article>`;
+  }).join('');
   $('#items-body').innerHTML = items.map((i) => {
     const low = i.min_quantity > 0 && i.quantity <= i.min_quantity;
     const expired = i.expires_at && daysUntil(i.expires_at) < 0;
@@ -246,8 +308,24 @@ function openItemDialog(item = null, prefill = {}) {
   }
   form.elements.id.value = item?.id ?? '';
   renderFormPhoto(item, item ? null : prefill.image_url);
+  $('#item-delete').hidden = !item;
   $('#item-dialog').showModal();
   form.elements.name.focus();
+}
+
+async function deleteFromForm() {
+  const id = $('#item-form').elements.id.value;
+  if (!id) return;
+  const name = $('#item-form').elements.name.value;
+  if (!confirm(`Usunąć „${name}”?`)) return;
+  try {
+    await api(`/items/${id}`, { method: 'DELETE' });
+    $('#item-dialog').close();
+    toast('Usunięto zasób');
+    loadDicts().then(refresh);
+  } catch (err) {
+    toast(err.message);
+  }
 }
 
 async function saveItem(e) {
@@ -275,7 +353,7 @@ async function saveItem(e) {
 async function onItemAction(e) {
   const btn = e.target.closest('button[data-act]');
   if (!btn) return;
-  const id = btn.closest('tr').dataset.id;
+  const id = btn.closest('[data-id]').dataset.id;
   const act = btn.dataset.act;
   try {
     if (act === 'inc' || act === 'dec') {
@@ -294,7 +372,7 @@ async function onItemAction(e) {
         : emptyLi('Brak zmian');
       $('#history-dialog').showModal();
     } else if (act === 'delete') {
-      const name = btn.closest('tr').querySelector('.item-name').textContent;
+      const name = btn.closest('[data-id]').querySelector('.item-name').textContent;
       if (!confirm(`Usunąć „${name}”?`)) return;
       await api(`/items/${id}`, { method: 'DELETE' });
       toast('Usunięto zasób');
@@ -531,6 +609,17 @@ function init() {
   $('#item-form').addEventListener('submit', saveItem);
   $$('dialog [data-close]').forEach((b) => b.addEventListener('click', () => b.closest('dialog').close()));
   $('#items-body').addEventListener('click', onItemAction);
+  $('#items-tiles').addEventListener('click', onItemAction);
+  $$('[data-layout]').forEach((b) => b.addEventListener('click', () => setLayout(b.dataset.layout)));
+  $('#loc-chips').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-loc]');
+    if (!b) return;
+    $('#f-location').value = b.dataset.loc;
+    loadItems().catch((err) => toast(err.message));
+  });
+  $('#fab-scan').addEventListener('click', scanFlow);
+  $('#item-delete').addEventListener('click', deleteFromForm);
+  applyLayout();
   $('#f-q').addEventListener('input', debounce(loadItems, 250));
   ['#f-category', '#f-location', '#f-status'].forEach((s) => $(s).addEventListener('change', loadItems));
   $('#shopping-list').addEventListener('click', onShoppingAction);

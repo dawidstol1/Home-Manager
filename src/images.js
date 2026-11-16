@@ -49,7 +49,7 @@ function createImageService(
    * Zwraca { item, found }.
    */
   async function attach(itemId, { force = false } = {}) {
-    const item = store.getItem(itemId);
+    const item = await store.getItem(itemId);
     if (!enabled || !item.barcode) return { item, found: false };
     if (item.image && !force && fs.existsSync(path.join(dir, item.image))) return { item, found: true };
     if (pending.has(item.id)) return pending.get(item.id);
@@ -66,11 +66,11 @@ function createImageService(
             file = await download(product.image_url, item.barcode).catch(() => null);
           }
         }
-        if (!file) return { item: store.getItem(item.id), found: false };
-        store.setImageForBarcode(item.barcode, file, { overwrite: force, itemId: item.id });
-        return { item: store.getItem(item.id), found: true };
+        if (!file) return { item: await store.getItem(item.id), found: false };
+        await store.setImageForBarcode(item.barcode, file, { overwrite: force, itemId: item.id });
+        return { item: await store.getItem(item.id), found: true };
       } catch {
-        return { item: store.getItem(item.id), found: false };
+        return { item: await store.getItem(item.id), found: false };
       } finally {
         pending.delete(item.id);
       }
@@ -91,7 +91,7 @@ function createImageService(
 
   /** Pobiera brakujące zdjęcia dla wszystkich zasobów z kodem kreskowym. */
   async function fillMissing() {
-    const missing = store.listItems().filter((i) => i.barcode && !i.image);
+    const missing = (await store.listItems()).filter((i) => i.barcode && !i.image);
     const seen = new Set();
     let found = 0;
     for (const item of missing) {

@@ -77,7 +77,8 @@ function serveStatic(req, res, pathname) {
  * Handler zwraca obiekt (200), { status, body } lub undefined (204).
  */
 function buildRoutes(store, lookupProduct, images) {
-  const withImage = (item) => {
+  const withImage = async (pending) => {
+    const item = await pending;
     if (item.barcode && !item.image) images.attachLater(item.id);
     return item;
   };
@@ -111,7 +112,7 @@ function buildRoutes(store, lookupProduct, images) {
         }
         const barcode = toBarcode(raw ?? '');
         if (!barcode) throw new ValidationError('Podaj kod kreskowy');
-        const items = store.listItems({ barcode });
+        const items = await store.listItems({ barcode });
         const product = items.length ? null : await lookupProduct(barcode);
         return { barcode, items, product };
       },
@@ -124,11 +125,11 @@ function buildRoutes(store, lookupProduct, images) {
     ['POST', /^\/api\/import$/, ({ body }) => store.importAll(body)],
 
     ['GET', /^\/api\/(categories|locations)$/, ({ m }) => store.listDict(m[1])],
-    ['POST', /^\/api\/(categories|locations)$/, ({ m, body }) => ({ status: 201, body: store.createDict(m[1], body.name) })],
+    ['POST', /^\/api\/(categories|locations)$/, async ({ m, body }) => ({ status: 201, body: await store.createDict(m[1], body.name) })],
     ['DELETE', /^\/api\/(categories|locations)\/(\d+)$/, ({ m }) => store.deleteDict(m[1], m[2])],
 
     ['GET', /^\/api\/items$/, ({ query }) => store.listItems(Object.fromEntries(query))],
-    ['POST', /^\/api\/items$/, ({ body }) => ({ status: 201, body: withImage(store.createItem(body)) })],
+    ['POST', /^\/api\/items$/, async ({ body }) => ({ status: 201, body: await withImage(store.createItem(body)) })],
     ['GET', /^\/api\/items\/(\d+)$/, ({ m }) => store.getItem(m[1])],
     ['PUT', /^\/api\/items\/(\d+)$/, ({ m, body }) => withImage(store.updateItem(m[1], body))],
     ['PATCH', /^\/api\/items\/(\d+)$/, ({ m, body }) => withImage(store.updateItem(m[1], body))],

@@ -31,20 +31,11 @@ function toProduct(code, p) {
 }
 
 function createProductLookup(store, { fetchImpl = globalThis.fetch, enabled = true, timeoutMs = 4000 } = {}) {
-  const cacheGet = store.db.prepare('SELECT data, fetched_at FROM barcode_cache WHERE barcode = ?');
-  const cachePut = store.db.prepare(
-    `INSERT INTO barcode_cache (barcode, data, fetched_at) VALUES (?, ?, ?)
-     ON CONFLICT(barcode) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at`
-  );
-
   return async function lookup(code) {
     if (!enabled || !isRetailCode(code)) return null;
 
-    const cached = cacheGet.get(code);
-    if (cached) {
-      const data = JSON.parse(cached.data);
-      if (data || Date.now() - Number(cached.fetched_at) < MISS_TTL_MS) return data;
-    }
+    const cached = await store.getCachedProduct(code).catch(() => null);
+    if (cached && (cached.data || Date.now() - cached.fetchedAt < MISS_TTL_MS)) return cached.data;
 
     try {
       const res = await fetchImpl(`${OFF_URL}${encodeURIComponent(code)}.json?fields=${FIELDS}`, {
@@ -54,7 +45,7 @@ function createProductLookup(store, { fetchImpl = globalThis.fetch, enabled = tr
       if (!res.ok && res.status !== 404) return null; // błąd usługi – nie zapisujemy
       const body = await res.json();
       const product = body?.status === 1 && body.product ? toProduct(code, body.product) : null;
-      cachePut.run(code, JSON.stringify(product), Date.now());
+      await store.putCachedProduct(code, product).catch(() => {});
       return product;
     } catch {
       return null; // brak sieci / timeout – skanowanie działa dalej bez podpowiedzi

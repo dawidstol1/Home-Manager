@@ -18,10 +18,10 @@
   <header class="topbar">
     <h1>🏠 Manager zasobów domowych</h1>
     <nav class="tabs" role="tablist">
-      <button class="tab active" data-view="dashboard" role="tab">Pulpit</button>
-      <button class="tab" data-view="items" role="tab">Zasoby</button>
-      <button class="tab" data-view="shopping" role="tab">Lista zakupów</button>
-      <button class="tab" data-view="settings" role="tab">Ustawienia</button>
+      <button class="tab active" data-view="dashboard" role="tab"><span class="tab-ico" aria-hidden="true">📊</span><span>Pulpit</span></button>
+      <button class="tab" data-view="items" role="tab"><span class="tab-ico" aria-hidden="true">📦</span><span>Zasoby</span></button>
+      <button class="tab" data-view="shopping" role="tab"><span class="tab-ico" aria-hidden="true">🛒</span><span>Zakupy</span><span class="tab-badge" id="shop-badge" hidden></span></button>
+      <button class="tab" data-view="settings" role="tab"><span class="tab-ico" aria-hidden="true">⚙️</span><span>Ustawienia</span></button>
     </nav>
   </header>
 
@@ -60,7 +60,15 @@
         <button class="btn" id="btn-scan">📷 Skanuj</button>
         <button class="btn primary" id="btn-add">+ Dodaj zasób</button>
       </div>
-      <div class="table-wrap">
+      <div class="items-head">
+        <div class="loc-chips" id="loc-chips" role="group" aria-label="Miejsca"></div>
+        <div class="layout-toggle" role="group" aria-label="Układ listy">
+          <button type="button" class="btn sm" data-layout="tiles" aria-pressed="true">▦ Kafelki</button>
+          <button type="button" class="btn sm" data-layout="table" aria-pressed="false">☰ Tabela</button>
+        </div>
+      </div>
+      <div class="tiles" id="items-tiles"></div>
+      <div class="table-wrap" id="items-table" hidden>
         <table class="items">
           <thead>
             <tr>
@@ -70,8 +78,8 @@
           </thead>
           <tbody id="items-body"></tbody>
         </table>
-        <p class="empty" id="items-empty" hidden>Brak zasobów spełniających kryteria.</p>
       </div>
+      <p class="empty" id="items-empty" hidden>Brak zasobów spełniających kryteria.</p>
     </section>
 
     <!-- LISTA ZAKUPÓW -->
@@ -162,6 +170,7 @@
       <label class="full">Notatki<textarea name="notes" rows="2"></textarea></label>
       <p class="form-error" id="item-error" hidden></p>
       <div class="dialog-actions">
+        <button type="button" class="btn danger spacer" id="item-delete" hidden>Usuń produkt</button>
         <button type="button" class="btn" data-close>Anuluj</button>
         <button type="submit" class="btn primary" value="save">Zapisz</button>
       </div>
@@ -224,6 +233,8 @@
     <ul class="list" id="history-list"></ul>
     <div class="dialog-actions"><button class="btn" data-close>Zamknij</button></div>
   </dialog>
+
+  <button type="button" class="fab" id="fab-scan" aria-label="Skanuj produkt">📷</button>
 
   <div id="toast" role="status" aria-live="polite"></div>
 

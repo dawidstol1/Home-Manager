@@ -18,28 +18,63 @@ ile zostało, kiedy traci ważność i co trzeba dokupić.
 - **Zdjęcia produktów** pobierane automatycznie z Open Food Facts po kodzie kreskowym i zapisywane lokalnie
 - **iOS:** natywna aplikacja SwiftUI (`ios/`) oraz PWA do zainstalowania z Safari
 
-## Wymagania
+## Uruchomienie – najprościej (Docker)
 
-- Node.js **22.13+** (korzysta z wbudowanego modułu `node:sqlite`)
-- Brak zewnętrznych zależności – nie trzeba uruchamiać `npm install`
-
-## Uruchomienie
+Potrzebny jest tylko [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows / macOS) albo Docker na Linuksie.
 
 ```bash
-npm start          # http://127.0.0.1:3000
+docker compose up -d        # PostgreSQL + aplikacja → http://localhost:3000
+docker compose logs -f app  # podgląd logów
+docker compose down         # zatrzymanie (dane zostają w wolumenach)
+```
+
+Dane bazy PostgreSQL i zdjęcia produktów są trzymane w wolumenach Dockera (`pgdata`, `images`), więc przetrwają
+restart i aktualizację. Hasło bazy można zmienić zmienną `POSTGRES_PASSWORD` (np. w pliku `.env` obok
+`docker-compose.yml`) – **przed** pierwszym uruchomieniem.
+
+## Uruchomienie bez Dockera
+
+Wymagania: Node.js **22.13+** i PostgreSQL **13+** (testowane na 16).
+
+```bash
+# jednorazowo: użytkownik i baza w PostgreSQL
+sudo -u postgres psql -c "CREATE ROLE homemanager LOGIN PASSWORD 'homemanager';"
+sudo -u postgres psql -c "CREATE DATABASE homemanager OWNER homemanager;"
+
+npm install
+npm start          # http://127.0.0.1:3000 – tabele tworzą się same przy pierwszym starcie
 npm run dev        # tryb z automatycznym przeładowaniem
-npm test           # testy API
+```
+
+Testy potrzebują osobnej bazy `homemanager_test` (każdy plik testów tworzy w niej i usuwa własny schemat):
+
+```bash
+sudo -u postgres psql -c "CREATE DATABASE homemanager_test OWNER homemanager;"
+npm test
 ```
 
 Zmienne środowiskowe:
 
 | Zmienna   | Domyślnie                   | Opis                       |
 |-----------|-----------------------------|----------------------------|
+| `DATABASE_URL` | `postgres://homemanager:homemanager@localhost:5432/homemanager` | Połączenie z PostgreSQL |
+| `TEST_DATABASE_URL` | `…/homemanager_test` | Baza dla `npm test` |
 | `PORT`    | `3000`                      | Port serwera               |
 | `HOST`    | `127.0.0.1`                 | Adres nasłuchu (`0.0.0.0`, by udostępnić w sieci domowej) |
-| `DB_FILE` | `data/home-manager.db`      | Ścieżka do pliku bazy SQLite |
 | `PRODUCT_LOOKUP` | włączone             | `off` wyłącza podpowiedzi nazw i zdjęcia z Open Food Facts |
-| `IMAGES_DIR` | `data/images` (obok bazy) | Katalog na pobrane zdjęcia produktów |
+| `IMAGES_DIR` | `data/images`            | Katalog na pobrane zdjęcia produktów |
+
+**Baza danych:** tabele `items` (produkty), `categories`, `locations`, `history` (każda zmiana stanu) i
+`barcode_cache` (zapamiętane odpowiedzi Open Food Facts). Zmiany ilości są wykonywane w transakcji z blokadą
+wiersza, więc kilka osób może jednocześnie zużywać i dokupować ten sam produkt bez gubienia zmian.
+Kopia zapasowa: przycisk „Eksportuj JSON” w Ustawieniach albo `pg_dump homemanager > kopia.sql`.
+
+## Interfejs
+
+- **Kafelki ze zdjęciami** (domyślnie) albo **tabela** – przełącznik nad listą, wybór jest zapamiętywany.
+- **Miejsca** – przyciski „Wszystkie / Kuchnia / Spiżarnia…” z liczbą produktów do szybkiego filtrowania.
+- **Na telefonie** – dolny pasek nawigacji z licznikiem zakupów i pływający przycisk 📷 do skanowania.
+- Usuwanie produktu jest też dostępne w formularzu edycji.
 
 ## Skanowanie etykiet
 
@@ -52,7 +87,7 @@ Zmienne środowiskowe:
 Kod można też zeskanować bezpośrednio w formularzu (pole „Kod kreskowy”).
 
 **Zdjęcia produktów** – gdy dodajesz produkt z kodem kreskowym, serwer w tle szuka go w Open Food Facts,
-pobiera zdjęcie opakowania i zapisuje je w `data/images/` (potem działa bez internetu). W formularzu produktu są
+pobiera zdjęcie opakowania i zapisuje je w `data/images/` (w Dockerze: wolumen `images`) (potem działa bez internetu). W formularzu produktu są
 przyciski „Pobierz zdjęcie z internetu” i „Usuń zdjęcie”, a w Ustawieniach „Pobierz brakujące zdjęcia” dla produktów
 dodanych wcześniej. Zdjęcia są dostępne głównie dla żywności i napojów; pozostałe produkty mają literę zamiast zdjęcia.
 
@@ -126,7 +161,7 @@ przez zwykłe HTTP w sieci lokalnej aplikacja działa, ale tylko online.
 
 ```
 src/
-  db.js       – schemat bazy, migracje, walidacja i logika (klasa Store)
+  db.js       – PostgreSQL: schemat, walidacja i logika (klasa Store)
   products.js – podpowiedzi produktów po kodzie (Open Food Facts + cache)
   images.js   – pobieranie i przechowywanie zdjęć produktów
   expiry.js   – odczyt daty ważności z tekstu etykiety
@@ -137,7 +172,8 @@ public/       – interfejs (HTML, CSS, JS bez frameworków) + manifest PWA i se
   vendor/     – dołączona biblioteka ZXing (Apache-2.0)
 ios/          – natywna aplikacja iOS (SwiftUI)
 test/         – testy API (node:test)
-data/         – plik bazy danych (ignorowany przez git)
+data/         – zdjęcia produktów (ignorowane przez git)
+Dockerfile, docker-compose.yml – uruchomienie z PostgreSQL jednym poleceniem
 ```
 
 ## REST API
