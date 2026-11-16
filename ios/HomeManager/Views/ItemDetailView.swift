@@ -11,6 +11,7 @@ struct ItemDetailView: View {
     @State private var amountText = "1"
     @State private var showingEdit = false
     @State private var confirmDelete = false
+    @State private var fetchingImage = false
     @State private var error: String?
 
     var body: some View {
@@ -44,6 +45,8 @@ struct ItemDetailView: View {
         List {
             Section {
                 VStack(spacing: 4) {
+                    ProductImage(item: item, size: 140)
+                        .padding(.bottom, 6)
                     Text(item.quantityText)
                         .font(.system(size: 40, weight: .bold, design: .rounded))
                         .monospacedDigit()
@@ -129,6 +132,23 @@ struct ItemDetailView: View {
                 }
             }
 
+            if item.barcode != nil {
+                Section {
+                    Button {
+                        fetchImage()
+                    } label: {
+                        Label(item.image == nil ? "Pobierz zdjęcie z internetu" : "Pobierz zdjęcie ponownie",
+                              systemImage: "photo.badge.arrow.down")
+                    }
+                    .disabled(fetchingImage)
+                    if item.image != nil {
+                        Button("Usuń zdjęcie", role: .destructive) { removeImage() }
+                    }
+                } footer: {
+                    Text("Zdjęcia pochodzą z bazy Open Food Facts (głównie żywność).")
+                }
+            }
+
             Section {
                 Button("Usuń zasób", role: .destructive) { confirmDelete = true }
             }
@@ -158,6 +178,32 @@ struct ItemDetailView: View {
         Task {
             do {
                 item = try await model.api.adjust(itemId, delta: sign * amount)
+                model.didChange()
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
+    }
+
+    private func fetchImage() {
+        fetchingImage = true
+        Task {
+            defer { fetchingImage = false }
+            do {
+                let result = try await model.api.fetchImage(itemId)
+                item = result.item
+                if !result.found { error = "Nie znaleziono zdjęcia dla tego kodu w Open Food Facts." }
+                model.didChange()
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
+    }
+
+    private func removeImage() {
+        Task {
+            do {
+                item = try await model.api.removeImage(itemId)
                 model.didChange()
             } catch {
                 self.error = error.localizedDescription

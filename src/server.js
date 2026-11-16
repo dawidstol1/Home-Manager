@@ -12,7 +12,8 @@ const DB_FILE = process.env.DB_FILE || path.join(__dirname, '..', 'data', 'home-
 
 fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
 const store = new Store(DB_FILE);
-const server = http.createServer(createApp(store));
+const IMAGES_DIR = process.env.IMAGES_DIR || path.join(path.dirname(DB_FILE), 'images');
+const server = http.createServer(createApp(store, { imagesDir: IMAGES_DIR }));
 
 server.listen(PORT, HOST, () => {
   console.log(`Manager zasobów domowych działa: http://${HOST}:${PORT}`);

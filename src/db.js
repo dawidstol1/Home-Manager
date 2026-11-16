@@ -155,6 +155,7 @@ class Store {
   migrate() {
     const cols = this.db.prepare('PRAGMA table_info(items)').all().map((c) => c.name);
     if (!cols.includes('barcode')) this.db.exec('ALTER TABLE items ADD COLUMN barcode TEXT');
+    if (!cols.includes('image')) this.db.exec('ALTER TABLE items ADD COLUMN image TEXT');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_items_barcode ON items(barcode)');
   }
 
@@ -268,6 +269,8 @@ class Store {
       unit: input.unit === undefined ? undefined : String(input.unit).trim() || 'szt.',
       notes: input.notes === undefined ? undefined : String(input.notes),
       barcode: toBarcode(input.barcode),
+      // Klient może tylko usunąć zdjęcie; nazwę pliku ustawia wyłącznie serwer.
+      image: input.image === null ? null : undefined,
     };
     for (const [k, v] of Object.entries(map)) if (v !== undefined) out[k] = v;
     return out;
@@ -300,6 +303,13 @@ class Store {
       }
       return this.getItem(current.id);
     });
+  }
+
+  /** Zapisuje plik zdjęcia dla zasobu i dla innych pozycji z tym kodem, które jeszcze go nie mają. */
+  setImageForBarcode(barcode, file, { overwrite = false, itemId = null } = {}) {
+    this.db
+      .prepare("UPDATE items SET image = ?, updated_at = datetime('now') WHERE barcode = ? AND (image IS NULL OR id = ? OR ?)")
+      .run(file, barcode, itemId ?? -1, overwrite ? 1 : 0);
   }
 
   deleteItem(id) {

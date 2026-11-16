@@ -15,6 +15,7 @@ ile zostało, kiedy traci ważność i co trzeba dokupić.
 - Responsywny interfejs, tryb ciemny zgodny z ustawieniami systemu
 - **Skanowanie etykiet** – kod kreskowy (EAN/UPC/QR…) rozpoznaje znany produkt (szybkie +1/−1),
   a nowy podpowiada nazwę z bazy Open Food Facts; datę ważności można odczytać ze zdjęcia etykiety (OCR)
+- **Zdjęcia produktów** pobierane automatycznie z Open Food Facts po kodzie kreskowym i zapisywane lokalnie
 - **iOS:** natywna aplikacja SwiftUI (`ios/`) oraz PWA do zainstalowania z Safari
 
 ## Wymagania
@@ -37,7 +38,8 @@ Zmienne środowiskowe:
 | `PORT`    | `3000`                      | Port serwera               |
 | `HOST`    | `127.0.0.1`                 | Adres nasłuchu (`0.0.0.0`, by udostępnić w sieci domowej) |
 | `DB_FILE` | `data/home-manager.db`      | Ścieżka do pliku bazy SQLite |
-| `PRODUCT_LOOKUP` | włączone             | `off` wyłącza podpowiedzi nazw z Open Food Facts |
+| `PRODUCT_LOOKUP` | włączone             | `off` wyłącza podpowiedzi nazw i zdjęcia z Open Food Facts |
+| `IMAGES_DIR` | `data/images` (obok bazy) | Katalog na pobrane zdjęcia produktów |
 
 ## Skanowanie etykiet
 
@@ -48,6 +50,11 @@ Zmienne środowiskowe:
   [Open Food Facts](https://world.openfoodfacts.org), z podpowiedzianą nazwą i kategorią.
 
 Kod można też zeskanować bezpośrednio w formularzu (pole „Kod kreskowy”).
+
+**Zdjęcia produktów** – gdy dodajesz produkt z kodem kreskowym, serwer w tle szuka go w Open Food Facts,
+pobiera zdjęcie opakowania i zapisuje je w `data/images/` (potem działa bez internetu). W formularzu produktu są
+przyciski „Pobierz zdjęcie z internetu” i „Usuń zdjęcie”, a w Ustawieniach „Pobierz brakujące zdjęcia” dla produktów
+dodanych wcześniej. Zdjęcia są dostępne głównie dla żywności i napojów; pozostałe produkty mają literę zamiast zdjęcia.
 
 **Data ważności (OCR)** – w formularzu przycisk „📷 Z etykiety” (web) / „Odczytaj datę z etykiety” (iOS).
 Rozpoznany tekst trafia do parsera na serwerze, który rozumie m.in. `12.05.2027`, `12/05/27`, `2027-05-12`,
@@ -121,6 +128,7 @@ przez zwykłe HTTP w sieci lokalnej aplikacja działa, ale tylko online.
 src/
   db.js       – schemat bazy, migracje, walidacja i logika (klasa Store)
   products.js – podpowiedzi produktów po kodzie (Open Food Facts + cache)
+  images.js   – pobieranie i przechowywanie zdjęć produktów
   expiry.js   – odczyt daty ważności z tekstu etykiety
   app.js      – routing REST API i serwowanie plików statycznych
   server.js   – punkt startowy serwera HTTP
@@ -144,6 +152,9 @@ data/         – plik bazy danych (ignorowany przez git)
 | GET / POST | `/api/categories`, `/api/locations` | Słowniki |
 | DELETE | `/api/categories/:id`, `/api/locations/:id` | Usunięcie pozycji słownika |
 | GET | `/api/barcode/:kod` lub `/api/barcode?code=` | Zasoby z danym kodem + podpowiedź produktu |
+| POST / DELETE | `/api/items/:id/image` | Pobierz zdjęcie z Open Food Facts / usuń zdjęcie |
+| POST | `/api/images/fill` | Pobierz brakujące zdjęcia dla wszystkich produktów z kodem |
+| GET | `/images/:plik` | Zapisane zdjęcie produktu |
 | POST | `/api/expiry/parse` | Data ważności z tekstu etykiety `{ "text": "..." }` → `{ "date": "2027-05-12" }` |
 | GET | `/api/stats` | Statystyki pulpitu |
 | GET | `/api/shopping-list` | Lista zakupów |

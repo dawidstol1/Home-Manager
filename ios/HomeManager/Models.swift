@@ -15,6 +15,8 @@ struct Item: Codable, Identifiable, Hashable {
     var expiresAt: String?
     var notes: String
     var barcode: String?
+    /// Nazwa pliku zdjęcia na serwerze (`/images/<plik>`), pobranego z Open Food Facts.
+    var image: String?
     var createdAt: String?
     var updatedAt: String?
 
@@ -109,6 +111,12 @@ struct BarcodeLookup: Decodable {
     let barcode: String
     let items: [Item]
     let product: ProductHint?
+}
+
+/// Odpowiedź `POST /api/items/:id/image`.
+struct ImageFetchResult: Decodable {
+    let item: Item
+    let found: Bool
 }
 
 /// Odpowiedź `/api/expiry/parse`.

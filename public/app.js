@@ -141,8 +141,13 @@ async function loadItems() {
     return `
       <tr class="${expired ? 'expired' : low ? 'low' : ''}" data-id="${i.id}">
         <td>
-          <div class="item-name">${esc(i.name)}</div>
-          ${i.notes ? `<div class="item-notes">${esc(i.notes)}</div>` : ''}
+          <div class="item-cell">
+            ${thumb(i)}
+            <div>
+              <div class="item-name">${esc(i.name)}</div>
+              ${i.notes ? `<div class="item-notes">${esc(i.notes)}</div>` : ''}
+            </div>
+          </div>
         </td>
         <td class="${i.category ? '' : 'nil'}">${esc(i.category ?? '—')}</td>
         <td class="${i.location ? '' : 'nil'}">${esc(i.location ?? '—')}</td>
@@ -159,16 +164,88 @@ async function loadItems() {
   }).join('');
 }
 
+/** Miniatura produktu: zdjęcie z serwera albo pierwsza litera nazwy. */
+function thumb(i, cls = 'thumb') {
+  if (i.image) return `<img class="${cls}" src="/images/${encodeURIComponent(i.image)}" alt="" loading="lazy">`;
+  return `<span class="${cls} thumb-empty" aria-hidden="true">${esc((i.name || '?').trim().charAt(0).toUpperCase())}</span>`;
+}
+
+/** Podgląd zdjęcia w formularzu: zapisane zdjęcie, podpowiedź z bazy produktów albo nic. */
+function renderFormPhoto(item, previewUrl) {
+  const box = $('#item-photo');
+  const src = item?.image ? `/images/${encodeURIComponent(item.image)}?v=${Date.now()}` : previewUrl;
+  $('#item-photo-img').hidden = !src;
+  if (src) $('#item-photo-img').src = src;
+  else $('#item-photo-img').removeAttribute('src');
+  $('#item-photo-note').textContent = item?.image
+    ? 'Zdjęcie z Open Food Facts.'
+    : previewUrl
+      ? 'Zdjęcie z Open Food Facts zapisze się po dodaniu produktu.'
+      : item
+        ? (item.barcode ? 'Brak zdjęcia – spróbuj pobrać je z internetu.' : 'Dodaj kod kreskowy, aby pobrać zdjęcie z internetu.')
+        : 'Zdjęcie pobierze się samo, jeśli produkt z tym kodem jest w Open Food Facts.';
+  $('#item-photo-fetch').hidden = !item?.barcode;
+  $('#item-photo-remove').hidden = !item?.image;
+  box.dataset.id = item?.id ?? '';
+}
+
+async function fetchItemPhoto() {
+  const id = $('#item-photo').dataset.id;
+  if (!id) return;
+  const btn = $('#item-photo-fetch');
+  btn.disabled = true;
+  $('#item-photo-note').textContent = 'Szukam zdjęcia w Open Food Facts…';
+  try {
+    const { item, found } = await api(`/items/${id}/image`, { method: 'POST' });
+    renderFormPhoto(item);
+    if (!found) $('#item-photo-note').textContent = 'Nie znaleziono zdjęcia dla tego kodu w Open Food Facts.';
+    refresh();
+  } catch (err) {
+    $('#item-photo-note').textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function removeItemPhoto() {
+  const id = $('#item-photo').dataset.id;
+  if (!id) return;
+  try {
+    renderFormPhoto(await api(`/items/${id}/image`, { method: 'DELETE' }));
+    refresh();
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+async function fillMissingPhotos() {
+  const btn = $('#btn-fill-photos');
+  btn.disabled = true;
+  $('#fill-photos-status').textContent = 'Pobieram zdjęcia… to może chwilę potrwać.';
+  try {
+    const { checked, found } = await api('/images/fill', { method: 'POST' });
+    $('#fill-photos-status').textContent = checked
+      ? `Sprawdzono ${checked} ${checked === 1 ? 'kod' : 'kodów'}, pobrano ${found} ${found === 1 ? 'zdjęcie' : 'zdjęć'}.`
+      : 'Wszystkie produkty z kodem kreskowym mają już zdjęcia.';
+  } catch (err) {
+    $('#fill-photos-status').textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 function openItemDialog(item = null, prefill = {}) {
   const form = $('#item-form');
   form.reset();
   $('#item-error').hidden = true;
   $('#item-dialog-title').textContent = item ? 'Edytuj zasób' : 'Nowy zasób';
-  const values = item ?? { quantity: 1, unit: 'szt.', min_quantity: 0, ...prefill };
+  const { image_url: _preview, ...prefillValues } = prefill;
+  const values = item ?? { quantity: 1, unit: 'szt.', min_quantity: 0, ...prefillValues };
   for (const el of form.elements) {
     if (el.name && el.name in values) el.value = values[el.name] ?? '';
   }
   form.elements.id.value = item?.id ?? '';
+  renderFormPhoto(item, item ? null : prefill.image_url);
   $('#item-dialog').showModal();
   form.elements.name.focus();
 }
@@ -183,10 +260,12 @@ async function saveItem(e) {
   data.category_id = data.category_id || null;
   data.location_id = data.location_id || null;
   try {
-    await api(id ? `/items/${id}` : '/items', { method: id ? 'PUT' : 'POST', body: data });
+    const saved = await api(id ? `/items/${id}` : '/items', { method: id ? 'PUT' : 'POST', body: data });
     $('#item-dialog').close();
     toast(id ? 'Zapisano zmiany' : 'Dodano zasób');
     refresh();
+    // Zdjęcie z internetu pobiera się w tle – odśwież listę, gdy już będzie.
+    if (saved.barcode && !saved.image) setTimeout(refresh, 2500);
   } catch (err) {
     $('#item-error').textContent = err.message;
     $('#item-error').hidden = false;
@@ -251,6 +330,7 @@ function openNewFromScan(barcode, product) {
     const cat = state.categories.find((c) => c.name === product.category_hint);
     if (cat) prefill.category_id = cat.id;
     if (product.quantity) prefill.notes = `Opakowanie: ${product.quantity}`;
+    if (product.image_url) prefill.image_url = product.image_url;
     toast(`Rozpoznano: ${product.name}`);
   } else {
     toast('Nowy kod – uzupełnij nazwę produktu');
@@ -265,8 +345,8 @@ function showScanResult(barcode, items) {
   const render = (list) => {
     $('#scan-result-list').innerHTML = list.map((i) => `
       <li data-id="${i.id}">
-        <span><strong>${esc(i.name)}</strong><br>
-          <span class="muted">${esc(i.location ?? 'bez lokalizacji')} · ${fmtNum(i.quantity)} ${esc(i.unit)}</span></span>
+        <span class="item-cell">${thumb(i)}<span><strong>${esc(i.name)}</strong><br>
+          <span class="muted">${esc(i.location ?? 'bez lokalizacji')} · ${fmtNum(i.quantity)} ${esc(i.unit)}</span></span></span>
         <span class="row">
           <button class="btn sm" data-scan-act="dec" title="Zużyj 1" ${i.quantity < 1 ? 'disabled' : ''}>−</button>
           <button class="btn sm" data-scan-act="inc" title="Dodaj 1">+</button>
@@ -458,6 +538,9 @@ function init() {
   $$('.inline-form').forEach((f) => f.addEventListener('submit', onDictSubmit));
   $('#view-settings').addEventListener('click', onDictDelete);
   $('#btn-export').addEventListener('click', () => exportData().catch((e) => toast(e.message)));
+  $('#item-photo-fetch').addEventListener('click', fetchItemPhoto);
+  $('#item-photo-remove').addEventListener('click', removeItemPhoto);
+  $('#btn-fill-photos').addEventListener('click', fillMissingPhotos);
   $('#import-file').addEventListener('change', importData);
 
   loadDicts().then(() => {

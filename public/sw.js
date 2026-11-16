@@ -2,7 +2,7 @@
 
 // Service worker: interfejs działa offline, a ostatnio pobrane dane API
 // są dostępne do podglądu bez połączenia (tylko odczyt).
-const VERSION = 'v2';
+const VERSION = 'v3';
 const SHELL_CACHE = `shell-${VERSION}`;
 const API_CACHE = `api-${VERSION}`;
 const SHELL = [

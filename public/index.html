@@ -107,6 +107,14 @@
         </div>
       </div>
       <div class="card">
+        <h2>Zdjęcia produktów</h2>
+        <p class="muted">Zdjęcia pobierają się same z bazy Open Food Facts dla produktów z kodem kreskowym (głównie żywność). Tu możesz pobrać brakujące dla produktów dodanych wcześniej.</p>
+        <div class="row">
+          <button class="btn" id="btn-fill-photos" type="button">Pobierz brakujące zdjęcia</button>
+          <span class="muted" id="fill-photos-status" role="status"></span>
+        </div>
+      </div>
+      <div class="card">
         <h2>Kopia zapasowa</h2>
         <p class="muted">Eksport zapisuje wszystkie dane do pliku JSON. Import <strong>zastępuje</strong> bieżące dane.</p>
         <div class="row">
@@ -122,6 +130,16 @@
     <form id="item-form" method="dialog">
       <h2 id="item-dialog-title">Nowy zasób</h2>
       <input type="hidden" name="id">
+      <div class="full item-photo" id="item-photo">
+        <img id="item-photo-img" alt="Zdjęcie produktu" hidden>
+        <div class="item-photo-side">
+          <span class="muted" id="item-photo-note"></span>
+          <span class="row">
+            <button type="button" class="btn sm" id="item-photo-fetch" hidden>Pobierz zdjęcie z internetu</button>
+            <button type="button" class="btn sm danger" id="item-photo-remove" hidden>Usuń zdjęcie</button>
+          </span>
+        </div>
+      </div>
       <label class="full">Nazwa*<input name="name" required maxlength="200"></label>
       <label>Kategoria<select name="category_id"></select></label>
       <label>Lokalizacja<select name="location_id"></select></label>

@@ -79,6 +79,25 @@ struct APIClient {
 
     func history(_ id: Int) async throws -> [HistoryEntry] { try await get("items/\(id)/history") }
 
+    // MARK: - Zdjęcia
+
+    /// Adres zdjęcia produktu zapisanego na serwerze.
+    func imageURL(_ file: String) -> URL {
+        baseURL.appending(path: "images").appending(path: file)
+    }
+
+    /// Szuka zdjęcia w Open Food Facts po kodzie kreskowym i zapisuje je na serwerze.
+    func fetchImage(_ id: Int) async throws -> ImageFetchResult {
+        struct Empty: Encodable {}
+        return try await send("POST", "items/\(id)/image", body: Empty())
+    }
+
+    func removeImage(_ id: Int) async throws -> Item {
+        var req = URLRequest(url: url("items/\(id)/image"))
+        req.httpMethod = "DELETE"
+        return try await perform(req)
+    }
+
     // MARK: - Skanowanie
 
     func lookupBarcode(_ code: String) async throws -> BarcodeLookup {

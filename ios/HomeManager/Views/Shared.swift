@@ -66,12 +66,49 @@ struct NotConfiguredView: View {
     }
 }
 
+/// Zdjęcie produktu z serwera albo pierwsza litera nazwy, gdy zdjęcia nie ma.
+struct ProductImage: View {
+    let item: Item
+    var size: CGFloat = 44
+
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Group {
+            if let file = item.image, let url = try? model.api.imageURL(file) {
+                AsyncImage(url: url) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFit().padding(size > 60 ? 6 : 2)
+                    } else {
+                        placeholder
+                    }
+                }
+                .background(Color.white)
+            } else {
+                placeholder.background(Color(.secondarySystemBackground))
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size > 60 ? 14 : 8))
+        .overlay(RoundedRectangle(cornerRadius: size > 60 ? 14 : 8).stroke(Color(.separator), lineWidth: 0.5))
+        .accessibilityHidden(true)
+    }
+
+    private var placeholder: some View {
+        Text(String(item.name.prefix(1)).uppercased())
+            .font(size > 60 ? .largeTitle.weight(.semibold) : .headline)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 /// Wiersz zasobu używany na listach.
 struct ItemRow: View {
     let item: Item
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .center, spacing: 12) {
+            ProductImage(item: item)
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.name).font(.body.weight(.semibold))
                 let meta = [item.category, item.location].compactMap { $0 }.joined(separator: " · ")

@@ -5,6 +5,7 @@ const path = require('node:path');
 
 const { parseExpiry } = require('./expiry');
 const { createProductLookup } = require('./products');
+const { createImageService } = require('./images');
 const { toBarcode, ValidationError } = require('./db');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -16,6 +17,8 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
   '.ico': 'image/x-icon',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.webp': 'image/webp',
   '.webmanifest': 'application/manifest+json; charset=utf-8',
 };
 const MAX_BODY = 5 * 1024 * 1024;
@@ -73,8 +76,25 @@ function serveStatic(req, res, pathname) {
  * Tabela tras: [metoda, wzorzec, handler(ctx)].
  * Handler zwraca obiekt (200), { status, body } lub undefined (204).
  */
-function buildRoutes(store, lookupProduct) {
+function buildRoutes(store, lookupProduct, images) {
+  const withImage = (item) => {
+    if (item.barcode && !item.image) images.attachLater(item.id);
+    return item;
+  };
   return [
+    // Zdjęcia produktów
+    [
+      'POST',
+      /^\/api\/items\/(\d+)\/image$/,
+      async ({ m }) => {
+        const { item, found } = await images.attach(m[1], { force: true });
+        if (!item.barcode) throw new ValidationError('Dodaj kod kreskowy, aby pobrać zdjęcie');
+        return { item, found };
+      },
+    ],
+    ['DELETE', /^\/api\/items\/(\d+)\/image$/, ({ m }) => store.updateItem(m[1], { image: null })],
+    ['POST', /^\/api\/images\/fill$/, () => images.fillMissing()],
+
     // Skanowanie: znane zasoby z tym kodem + podpowiedź z bazy produktów, gdy brak dopasowań.
     // Kod w ścieżce (/api/barcode/5901234123457) lub w zapytaniu (/api/barcode?code=...).
     [
@@ -108,24 +128,44 @@ function buildRoutes(store, lookupProduct) {
     ['DELETE', /^\/api\/(categories|locations)\/(\d+)$/, ({ m }) => store.deleteDict(m[1], m[2])],
 
     ['GET', /^\/api\/items$/, ({ query }) => store.listItems(Object.fromEntries(query))],
-    ['POST', /^\/api\/items$/, ({ body }) => ({ status: 201, body: store.createItem(body) })],
+    ['POST', /^\/api\/items$/, ({ body }) => ({ status: 201, body: withImage(store.createItem(body)) })],
     ['GET', /^\/api\/items\/(\d+)$/, ({ m }) => store.getItem(m[1])],
-    ['PUT', /^\/api\/items\/(\d+)$/, ({ m, body }) => store.updateItem(m[1], body)],
-    ['PATCH', /^\/api\/items\/(\d+)$/, ({ m, body }) => store.updateItem(m[1], body)],
+    ['PUT', /^\/api\/items\/(\d+)$/, ({ m, body }) => withImage(store.updateItem(m[1], body))],
+    ['PATCH', /^\/api\/items\/(\d+)$/, ({ m, body }) => withImage(store.updateItem(m[1], body))],
     ['DELETE', /^\/api\/items\/(\d+)$/, ({ m }) => store.deleteItem(m[1])],
     ['POST', /^\/api\/items\/(\d+)\/adjust$/, ({ m, body }) => store.adjustQuantity(m[1], body.delta, body.note)],
     ['GET', /^\/api\/items\/(\d+)\/history$/, ({ m }) => store.getHistory(m[1])],
   ];
 }
 
-function createApp(store, { productLookup } = {}) {
-  const lookup =
-    productLookup ?? createProductLookup(store, { enabled: process.env.PRODUCT_LOOKUP !== 'off' });
-  const routes = buildRoutes(store, lookup);
+function createApp(store, { productLookup, images, imagesDir, imageFetch } = {}) {
+  const lookupEnabled = process.env.PRODUCT_LOOKUP !== 'off';
+  const lookup = productLookup ?? createProductLookup(store, { enabled: lookupEnabled });
+  const imageService =
+    images ??
+    createImageService(store, {
+      dir: imagesDir ?? path.join(__dirname, '..', 'data', 'images'),
+      lookup,
+      fetchImpl: imageFetch,
+      enabled: lookupEnabled,
+    });
+  const routes = buildRoutes(store, lookup, imageService);
 
   return async function handler(req, res) {
     const url = new URL(req.url, 'http://localhost');
     const { pathname } = url;
+
+    if (pathname.startsWith('/images/')) {
+      const file = imageService.filePath(pathname.slice('/images/'.length));
+      if (!file) return send(res, 404, 'Not found');
+      return fs.readFile(file, (err, data) => {
+        if (err) return send(res, 404, 'Not found');
+        send(res, 200, data, {
+          'Content-Type': MIME[path.extname(file)] ?? 'application/octet-stream',
+          'Cache-Control': 'public, max-age=86400',
+        });
+      });
+    }
 
     if (!pathname.startsWith('/api/')) {
       if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method not allowed');

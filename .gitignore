@@ -8,3 +8,6 @@ xcuserdata/
 DerivedData/
 *.xcuserstate
 build/
+
+# Zdjęcia produktów pobierane przez serwer
+data/images/

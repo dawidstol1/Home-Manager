@@ -162,6 +162,17 @@ dialog h2 { margin-top: 0; }
 }
 #toast.show { transform: translateX(-50%) translateY(0); }
 
+/* Zdjęcia produktów */
+.item-cell { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.thumb {
+  width: 44px; height: 44px; flex: none; border-radius: 8px; object-fit: contain;
+  background: #fff; border: 1px solid var(--border);
+}
+.thumb-empty { display: grid; place-items: center; background: var(--bg); color: var(--muted); font-weight: 600; }
+.item-photo { display: flex; gap: 12px; align-items: center; }
+.item-photo img { width: 96px; height: 96px; object-fit: contain; border-radius: 10px; background: #fff; border: 1px solid var(--border); flex: none; }
+.item-photo-side { display: grid; gap: 6px; font-size: .85rem; }
+
 /* Skanowanie */
 .input-with-btn { display: flex; gap: 6px; }
 .input-with-btn input { flex: 1; }

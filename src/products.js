@@ -8,7 +8,7 @@
  */
 
 const OFF_URL = 'https://world.openfoodfacts.org/api/v2/product/';
-const FIELDS = 'product_name,product_name_pl,generic_name_pl,brands,quantity,categories_tags,image_front_small_url';
+const FIELDS = 'product_name,product_name_pl,generic_name_pl,brands,quantity,categories_tags,image_front_url,image_front_small_url';
 const MISS_TTL_MS = 24 * 60 * 60 * 1000;
 
 const isRetailCode = (code) => /^\d{8}$|^\d{12,14}$/.test(code);
@@ -19,10 +19,11 @@ function toProduct(code, p) {
   const brand = (p.brands || '').split(',')[0].trim();
   return {
     barcode: code,
-    name: brand && !name.toLowerCase().includes(brand.toLowerCase()) ? `${name} (${brand})` : name,
+    // Krótką markę dopisujemy do nazwy; długie nazwy firm („Mars Wrigley Confectionery UK Limited”) pomijamy.
+    name: brand && brand.length <= 20 && !name.toLowerCase().includes(brand.toLowerCase()) ? `${name} (${brand})` : name,
     brand: brand || null,
     quantity: (p.quantity || '').trim() || null,
-    image_url: p.image_front_small_url || null,
+    image_url: p.image_front_url || p.image_front_small_url || null,
     // Open Food Facts zawiera głównie żywność.
     category_hint: 'Żywność',
     source: 'Open Food Facts',
