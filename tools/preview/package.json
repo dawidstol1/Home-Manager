@@ -1,0 +1,16 @@
+{
+  "name": "home-manager-preview",
+  "private": true,
+  "description": "Podgląd Home-Manager w przeglądarce: prawdziwy kod serwera na PostgreSQL w WebAssembly (PGlite)",
+  "scripts": {
+    "build": "node build-pglite.js && node bundle.js && node build-page.js"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.13",
+    "buffer": "^6.0.3",
+    "esbuild": "^0.28.2",
+    "js-sha256": "^1.0.1",
+    "path-browserify": "^1.0.1",
+    "scrypt-js": "^3.0.1"
+  }
+}

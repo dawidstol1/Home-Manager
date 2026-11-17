@@ -214,6 +214,7 @@ data/         – zdjęcia produktów (ignorowane przez git)
 Dockerfile, docker-compose.yml – uruchomienie z PostgreSQL jednym poleceniem
 deploy/       – systemd, nginx i przykładowa konfiguracja dla instalacji bez Dockera
 docs/         – instrukcja instalacji na Ubuntu
+tools/preview/ – podgląd w przeglądarce: serwer + PostgreSQL (PGlite) w jednej stronie, `npm run build`
 ```
 
 ## REST API
