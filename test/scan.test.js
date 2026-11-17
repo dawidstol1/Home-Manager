@@ -2,10 +2,8 @@
 
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const http = require('node:http');
-const { openTestStore, closeTestStore, TEST_URL } = require('./helpers');
+const { startApp, TEST_URL } = require('./helpers');
 const { Store } = require('../src/db');
-const { createApp } = require('../src/app');
 const { parseExpiry } = require('../src/expiry');
 const { createProductLookup } = require('../src/products');
 
@@ -59,8 +57,7 @@ describe('parseExpiry – odczyt daty ważności z tekstu etykiety', () => {
 });
 
 describe('API skanowania', () => {
-  let server;
-  let base;
+  let app;
   let store;
   let offCalls = 0;
 
@@ -79,26 +76,16 @@ describe('API skanowania', () => {
   };
 
   before(async () => {
-    store = await openTestStore();
-    const productLookup = createProductLookup(store, { fetchImpl: fakeFetch });
-    server = http.createServer(createApp(store, { productLookup }));
-    await new Promise((r) => server.listen(0, '127.0.0.1', r));
-    base = `http://127.0.0.1:${server.address().port}`;
+    // Wyszukiwarka produktów potrzebuje magazynu, a ten powstaje razem z aplikacją – stąd leniwe opakowanie.
+    let lookup;
+    app = await startApp({ productLookup: (code) => lookup(code) });
+    store = app.store;
+    lookup = createProductLookup(store, { fetchImpl: fakeFetch });
   });
 
-  after(async () => {
-    server.close();
-    await closeTestStore(store);
-  });
+  after(() => app.close());
 
-  const req = async (method, path, body) => {
-    const res = await fetch(base + path, {
-      method,
-      headers: body ? { 'Content-Type': 'application/json' } : {},
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    return { status: res.status, body: await res.json().catch(() => null) };
-  };
+  const req = (...args) => app.req(...args);
 
   test('nieznany kod – podpowiedź z bazy produktów (i cache)', async () => {
     const first = await req('GET', '/api/barcode/5900000000001');

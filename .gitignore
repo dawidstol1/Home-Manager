@@ -11,3 +11,6 @@ build/
 
 # Zdjęcia produktów pobierane przez serwer
 data/images/
+
+# Dokumenty sprzętów (paragony, gwarancje, instrukcje)
+data/uploads/

@@ -9,6 +9,11 @@ const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
 const DATABASE_URL = process.env.DATABASE_URL || DEFAULT_URL;
 const IMAGES_DIR = process.env.IMAGES_DIR || path.join(__dirname, '..', 'data', 'images');
+const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '..', 'data', 'uploads');
+// Za reverse proxy (nginx): ufaj nagłówkom X-Forwarded-For / X-Forwarded-Proto.
+const TRUST_PROXY = ['1', 'true', 'yes'].includes(String(process.env.TRUST_PROXY).toLowerCase());
+// Wymuszenie flagi Secure ciasteczka (domyślnie: automatycznie, gdy połączenie jest po HTTPS).
+const COOKIE_SECURE = process.env.COOKIE_SECURE === undefined ? undefined : ['1', 'true', 'yes'].includes(process.env.COOKIE_SECURE.toLowerCase());
 
 /** Adres bazy bez hasła – do logów. */
 function safeUrl(url) {
@@ -38,10 +43,18 @@ async function main() {
     }
   }
 
-  const server = http.createServer(createApp(store, { imagesDir: IMAGES_DIR }));
+  const server = http.createServer(createApp(store, {
+    imagesDir: IMAGES_DIR,
+    uploadsDir: UPLOADS_DIR,
+    trustProxy: TRUST_PROXY,
+    secureCookies: COOKIE_SECURE,
+  }));
   server.listen(PORT, HOST, () => {
     console.log(`Manager zasobów domowych działa: http://${HOST}:${PORT}`);
     console.log(`Baza danych: ${safeUrl(DATABASE_URL)}`);
+    store.countUsers().then((n) => {
+      if (!n) console.log('Brak kont – otwórz aplikację w przeglądarce i utwórz konto administratora.');
+    });
   });
 
   const shutdown = () => {

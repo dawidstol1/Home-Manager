@@ -27,7 +27,18 @@ struct SettingsView: View {
                 } header: {
                     Text("Serwer")
                 } footer: {
-                    Text("Adres komputera, na którym działa serwer Home-Manager. Uruchom go poleceniem `HOST=0.0.0.0 npm start`, aby był dostępny w sieci domowej.")
+                    Text("Adres serwera Home-Manager, np. `https://zasoby.example.pl` albo `192.168.1.30:3000` w sieci domowej.")
+                }
+
+                if let user = model.user {
+                    Section("Konto") {
+                        LabeledContent("Zalogowano jako", value: user.name)
+                        LabeledContent("Login", value: user.login)
+                        LabeledContent("Rola", value: user.isAdmin ? "Administrator" : "Domownik")
+                        Button("Wyloguj", role: .destructive) {
+                            Task { await model.logout() }
+                        }
+                    }
                 }
 
                 if model.isConfigured {
@@ -64,7 +75,7 @@ struct SettingsView: View {
         case .checking:
             HStack { ProgressView(); Text("Łączenie…").foregroundStyle(.secondary) }
         case let .ok(count):
-            Label("Połączono · \(count) zasobów", systemImage: "checkmark.circle.fill")
+            Label(count < 0 ? "Połączono – zaloguj się" : "Połączono · \(count) zasobów", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
         case let .failed(message):
             Label(message, systemImage: "exclamationmark.triangle.fill")
@@ -85,6 +96,11 @@ struct SettingsView: View {
     private func check() async {
         status = .checking
         do {
+            await model.checkAuth()
+            guard model.authState == .loggedIn else {
+                status = model.authState == .unknown ? .failed("Brak połączenia z serwerem") : .ok(-1)
+                return
+            }
             let stats = try await model.api.stats()
             try await model.loadDictionaries()
             status = .ok(stats.totalItems)

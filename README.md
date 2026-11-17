@@ -17,6 +17,19 @@ ile zostało, kiedy traci ważność i co trzeba dokupić.
   a nowy podpowiada nazwę z bazy Open Food Facts; datę ważności można odczytać ze zdjęcia etykiety (OCR)
 - **Zdjęcia produktów** pobierane automatycznie z Open Food Facts po kodzie kreskowym i zapisywane lokalnie
 - **iOS:** natywna aplikacja SwiftUI (`ios/`) oraz PWA do zainstalowania z Safari
+- **Partie z różnymi datami ważności** – np. 3 jogurty z trzema terminami; zużycie zdejmuje najpierw najstarszą partię (FIFO)
+- **Szybkie zużycie skanerem** – skanujesz kolejne opakowania, każde to −1 szt. (zużyte albo wyrzucone), z możliwością cofnięcia
+- **Wydatki i marnowanie** – wykresy wydatków miesięcznie, podział na kategorie, wartość wyrzuconego jedzenia, najczęściej wyrzucane produkty
+- **Skan paragonu** – zdjęcie paragonu → OCR → pozycje dopasowane do produktów (aplikacja zapamiętuje dopasowania), zapis zakupów jednym przyciskiem
+- **Konta domowników** – logowanie, administrator dodaje domowników; historia pokazuje, kto co zużył lub kupił
+- **Sprzęty i dokumenty** – gwarancje, przeglądy, paragony, instrukcje (PDF/zdjęcia) przy każdym sprzęcie, przypomnienia na pulpicie
+
+## Instalacja na własnym serwerze (Ubuntu, bez Dockera)
+
+Pełna instrukcja krok po kroku – LXC z Ubuntu 26.04, PostgreSQL na osobnym serwerze, systemd, nginx, HTTPS,
+kopie zapasowe: **[docs/INSTALACJA-UBUNTU.md](docs/INSTALACJA-UBUNTU.md)**. Gotowe pliki konfiguracyjne są w `deploy/`.
+
+Po pierwszym uruchomieniu aplikacja prosi o utworzenie konta administratora.
 
 ## Uruchomienie – najprościej (Docker)
 
@@ -28,7 +41,7 @@ docker compose logs -f app  # podgląd logów
 docker compose down         # zatrzymanie (dane zostają w wolumenach)
 ```
 
-Dane bazy PostgreSQL i zdjęcia produktów są trzymane w wolumenach Dockera (`pgdata`, `images`), więc przetrwają
+Dane bazy PostgreSQL, zdjęcia produktów i dokumenty są trzymane w wolumenach Dockera (`pgdata`, `images`, `uploads`), więc przetrwają
 restart i aktualizację. Hasło bazy można zmienić zmienną `POSTGRES_PASSWORD` (np. w pliku `.env` obok
 `docker-compose.yml`) – **przed** pierwszym uruchomieniem.
 
@@ -63,9 +76,16 @@ Zmienne środowiskowe:
 | `HOST`    | `127.0.0.1`                 | Adres nasłuchu (`0.0.0.0`, by udostępnić w sieci domowej) |
 | `PRODUCT_LOOKUP` | włączone             | `off` wyłącza podpowiedzi nazw i zdjęcia z Open Food Facts |
 | `IMAGES_DIR` | `data/images`            | Katalog na pobrane zdjęcia produktów |
+| `UPLOADS_DIR` | `data/uploads`          | Katalog na dokumenty sprzętów (paragony, gwarancje, instrukcje) |
+| `TRUST_PROXY` | wyłączone               | `1` za reverse proxy (nginx): prawdziwy IP i wykrywanie HTTPS z nagłówków `X-Forwarded-*` |
+| `COOKIE_SECURE` | automatycznie         | `1` wymusza flagę `Secure` ciasteczka sesji |
+| `REPORT_TZ` | `Europe/Warsaw`           | Strefa czasowa raportów wydatków |
 
-**Baza danych:** tabele `items` (produkty), `categories`, `locations`, `history` (każda zmiana stanu) i
-`barcode_cache` (zapamiętane odpowiedzi Open Food Facts). Zmiany ilości są wykonywane w transakcji z blokadą
+**Baza danych:** `items` (produkty), `batches` (partie z datami ważności – stan produktu to ich suma),
+`history` (każda zmiana stanu: powód zakup/zużycie/wyrzucenie/korekta, kwota, kto), `receipts` i `receipt_aliases`
+(paragony i zapamiętane dopasowania nazw), `equipment` i `documents` (sprzęty i ich pliki), `users` i `sessions`
+(konta, w bazie tylko skróty haseł i tokenów), `categories`, `locations`, `barcode_cache`. Schemat aktualizuje się
+sam przy starcie – także ze starszej wersji, bez utraty danych. Zmiany ilości są wykonywane w transakcji z blokadą
 wiersza, więc kilka osób może jednocześnie zużywać i dokupować ten sam produkt bez gubienia zmian.
 Kopia zapasowa: przycisk „Eksportuj JSON” w Ustawieniach albo `pg_dump homemanager > kopia.sql`.
 
@@ -115,6 +135,11 @@ Uwagi:
 
 Klient REST API tego serwera – dane są wspólne z wersją webową, więc cała rodzina widzi te same zapasy.
 
+Po wpisaniu adresu serwera aplikacja prosi o zalogowanie (to samo konto co w przeglądarce; token sesji trzymany
+jest w pęku kluczy iOS). Aplikacja iOS obsługuje zasoby, skanowanie, partie (podgląd, zdejmowanie całych partii),
+wyrzucanie i listę zakupów; **paragony, wydatki, sprzęty z dokumentami i zarządzanie domownikami** są na razie
+w wersji webowej (PWA).
+
 Wymagania: Mac z **Xcode 16+**, iOS **17+**.
 
 1. Uruchom serwer tak, by był dostępny w sieci domowej:
@@ -157,11 +182,24 @@ Wersja webowa działa też jako aplikacja na ekranie głównym: otwórz adres se
 Tryb offline (service worker – podgląd ostatnio pobranych danych) wymaga HTTPS lub `localhost`;
 przez zwykłe HTTP w sieci lokalnej aplikacja działa, ale tylko online.
 
+## Konta i bezpieczeństwo
+
+- Pierwsza osoba zakłada konto **administratora**; kolejnych domowników dodaje administrator (Więcej → Domownicy).
+- Hasła: scrypt z solą. Sesja: losowy token w ciasteczku `HttpOnly; SameSite=Lax` (przeglądarka) albo w nagłówku
+  `Authorization: Bearer` (aplikacja iOS), ważna 30 dni od ostatniego użycia.
+- Ochrona przed zgadywaniem haseł (10 prób / 15 min na adres IP) i przed CSRF (sprawdzanie nagłówka `Origin`).
+- Dokumenty są dostępne tylko po zalogowaniu; typ pliku jest sprawdzany po zawartości (PDF, JPG, PNG, WEBP, HEIC, tekst).
+- Zapomniane hasło: `node src/cli.js reset-password <login>` na serwerze.
+
 ## Struktura projektu
 
 ```
 src/
-  db.js       – PostgreSQL: schemat, walidacja i logika (klasa Store)
+  db.js       – PostgreSQL: schemat, migracje, walidacja i logika (klasa Store)
+  auth.js     – hasła, sesje, ciasteczka, limit prób logowania
+  receipt.js  – odczyt pozycji z tekstu paragonu
+  files.js    – przechowywanie dokumentów sprzętów
+  cli.js      – narzędzia administracyjne (reset hasła, lista kont)
   products.js – podpowiedzi produktów po kodzie (Open Food Facts + cache)
   images.js   – pobieranie i przechowywanie zdjęć produktów
   expiry.js   – odczyt daty ważności z tekstu etykiety
@@ -174,6 +212,8 @@ ios/          – natywna aplikacja iOS (SwiftUI)
 test/         – testy API (node:test)
 data/         – zdjęcia produktów (ignorowane przez git)
 Dockerfile, docker-compose.yml – uruchomienie z PostgreSQL jednym poleceniem
+deploy/       – systemd, nginx i przykładowa konfiguracja dla instalacji bez Dockera
+docs/         – instrukcja instalacji na Ubuntu
 ```
 
 ## REST API
@@ -194,11 +234,32 @@ Dockerfile, docker-compose.yml – uruchomienie z PostgreSQL jednym poleceniem
 | POST | `/api/expiry/parse` | Data ważności z tekstu etykiety `{ "text": "..." }` → `{ "date": "2027-05-12" }` |
 | GET | `/api/stats` | Statystyki pulpitu |
 | GET | `/api/shopping-list` | Lista zakupów |
-| GET / POST | `/api/export`, `/api/import` | Kopia zapasowa JSON |
+| GET / POST | `/api/export`, `/api/import` | Kopia zapasowa zapasów (JSON; import tylko administrator) |
+| POST | `/api/items/:id/adjust` | Rozszerzone: `{ "delta": 2, "expires_at": "2027-01-10", "total": 9.98 }` (zakup partii) lub `{ "delta": -1, "reason": "wasted" }` |
+| PATCH / DELETE | `/api/batches/:id` (`?reason=used\|wasted`) | Edycja / zdjęcie całej partii |
+| POST | `/api/consume` | Szybkie zużycie po kodzie `{ "barcode": "590…", "reason": "used\|wasted" }` |
+| POST | `/api/history/:id/undo` | Cofnięcie zużycia / wyrzucenia |
+| POST | `/api/receipts/parse` | Tekst paragonu → pozycje z podpowiedziami produktów |
+| GET / POST | `/api/receipts` | Lista paragonów / zapis paragonu (zakupy) |
+| GET | `/api/receipts/:id` | Pozycje paragonu |
+| GET | `/api/reports?months=6` | Wydatki, marnowanie, kategorie, domownicy |
+| GET / POST | `/api/equipment` | Sprzęty |
+| GET / PUT / PATCH / DELETE | `/api/equipment/:id` | Sprzęt z listą dokumentów |
+| POST | `/api/equipment/:id/documents?kind=warranty&name=plik.pdf` | Wysłanie pliku (treść żądania = plik) |
+| GET | `/api/documents/:id/file` | Pobranie dokumentu |
+| PATCH / DELETE | `/api/documents/:id` | Zmiana nazwy/rodzaju / usunięcie |
+| GET | `/api/auth/status` | Czy trzeba założyć pierwsze konto, kto jest zalogowany |
+| POST | `/api/auth/setup`, `/api/auth/login`, `/api/auth/logout` | Pierwsze konto / logowanie (zwraca `token`) / wylogowanie |
+| POST | `/api/auth/password` | Zmiana własnego hasła |
+| GET / POST / PATCH / DELETE | `/api/users`, `/api/users/:id` | Domownicy (zmiany – administrator) |
+
+Wszystkie ścieżki `/api/*` poza `auth/status`, `auth/setup` i `auth/login` wymagają zalogowania.
 
 Przykład:
 
 ```bash
-curl -X POST localhost:3000/api/items -H 'Content-Type: application/json' \
+TOKEN=$(curl -s -X POST localhost:3000/api/auth/login -H 'Content-Type: application/json' \
+  -d '{"login":"admin","password":"twojehaslo"}' | jq -r .token)
+curl -X POST localhost:3000/api/items -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"name":"Mąka","quantity":2,"unit":"kg","min_quantity":1}'
 ```

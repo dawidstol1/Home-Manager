@@ -2,36 +2,19 @@
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const http = require('node:http');
 const { addDays, today } = require('../src/db');
-const { openTestStore, closeTestStore } = require('./helpers');
-const { createApp } = require('../src/app');
+const { startApp } = require('./helpers');
 
-let server;
+let app;
 let base;
-let store;
+const req = (...args) => app.req(...args);
 
 before(async () => {
-  store = await openTestStore();
-  server = http.createServer(createApp(store));
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  base = `http://127.0.0.1:${server.address().port}`;
+  app = await startApp();
+  base = app.base;
 });
 
-after(async () => {
-  server.close();
-  await closeTestStore(store);
-});
-
-async function req(method, path, body) {
-  const res = await fetch(base + path, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
-  return { status: res.status, body: text ? JSON.parse(text) : null };
-}
+after(() => app.close());
 
 test('domyślne kategorie i lokalizacje są utworzone', async () => {
   const cats = await req('GET', '/api/categories');
@@ -63,7 +46,7 @@ test('walidacja danych wejściowych', async () => {
   assert.equal((await req('POST', '/api/items', { name: '' })).status, 400);
   assert.equal((await req('POST', '/api/items', { name: 'X', quantity: -1 })).status, 400);
   assert.equal((await req('POST', '/api/items', { name: 'X', expires_at: '15.11.2026' })).status, 400);
-  const bad = await fetch(`${base}/api/items`, { method: 'POST', body: '{nie json' });
+  const bad = await fetch(`${base}/api/items`, { method: 'POST', body: '{nie json', headers: { Authorization: `Bearer ${app.token}` } });
   assert.equal(bad.status, 400);
 });
 

@@ -15,13 +15,33 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <!-- Logowanie / pierwsze uruchomienie -->
+  <div class="auth-screen" id="auth-screen" hidden>
+    <form class="auth-card" id="auth-form">
+      <div class="auth-logo" aria-hidden="true">🏠</div>
+      <h1 id="auth-title">Zaloguj się</h1>
+      <p class="muted" id="auth-intro"></p>
+      <label data-setup>Twoje imię<input name="name" autocomplete="name" maxlength="60"></label>
+      <label>Login<input name="login" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+      <label>Hasło<input name="password" type="password" autocomplete="current-password" required></label>
+      <label data-setup>Powtórz hasło<input name="password2" type="password" autocomplete="new-password"></label>
+      <p class="form-error" id="auth-error" hidden></p>
+      <button class="btn primary" type="submit" id="auth-submit">Zaloguj</button>
+    </form>
+  </div>
+
   <header class="topbar">
-    <h1>🏠 Manager zasobów domowych</h1>
+    <div class="topbar-row">
+      <h1>🏠 Manager zasobów domowych</h1>
+      <button type="button" class="user-chip" id="user-chip" hidden title="Moje konto"></button>
+    </div>
     <nav class="tabs" role="tablist">
       <button class="tab active" data-view="dashboard" role="tab"><span class="tab-ico" aria-hidden="true">📊</span><span>Pulpit</span></button>
       <button class="tab" data-view="items" role="tab"><span class="tab-ico" aria-hidden="true">📦</span><span>Zasoby</span></button>
       <button class="tab" data-view="shopping" role="tab"><span class="tab-ico" aria-hidden="true">🛒</span><span>Zakupy</span><span class="tab-badge" id="shop-badge" hidden></span></button>
-      <button class="tab" data-view="settings" role="tab"><span class="tab-ico" aria-hidden="true">⚙️</span><span>Ustawienia</span></button>
+      <button class="tab" data-view="equipment" role="tab"><span class="tab-ico" aria-hidden="true">🔧</span><span>Sprzęty</span><span class="tab-badge" id="eq-badge" hidden></span></button>
+      <button class="tab" data-view="expenses" role="tab"><span class="tab-ico" aria-hidden="true">💰</span><span>Wydatki</span></button>
+      <button class="tab" data-view="settings" role="tab"><span class="tab-ico" aria-hidden="true">⚙️</span><span>Więcej</span></button>
     </nav>
   </header>
 
@@ -38,6 +58,10 @@
           <h2>⏰ Termin ważności (≤ 7 dni)</h2>
           <ul class="list" id="dash-expiring"></ul>
         </div>
+      </div>
+      <div class="card" id="dash-eq-card" hidden>
+        <h2>🔧 Gwarancje i przeglądy</h2>
+        <ul class="list" id="dash-eq"></ul>
       </div>
       <div class="card">
         <h2>Zasoby wg kategorii</h2>
@@ -58,6 +82,7 @@
           <option value="expired">Przeterminowane</option>
         </select>
         <button class="btn" id="btn-scan">📷 Skanuj</button>
+        <button class="btn" id="btn-quick">⚡ Szybkie zużycie</button>
         <button class="btn primary" id="btn-add">+ Dodaj zasób</button>
       </div>
       <div class="items-head">
@@ -87,15 +112,103 @@
       <div class="card">
         <div class="card-head">
           <h2>🛒 Do kupienia</h2>
-          <button class="btn" id="btn-copy-shopping">Kopiuj listę</button>
+          <span class="row">
+            <button class="btn" data-open-receipt>🧾 Skanuj paragon</button>
+            <button class="btn" id="btn-copy-shopping">Kopiuj listę</button>
+          </span>
         </div>
         <p class="muted">Pozycje, których stan spadł do poziomu minimalnego lub niżej.</p>
         <ul class="list shopping" id="shopping-list"></ul>
       </div>
     </section>
 
+    <!-- SPRZĘTY -->
+    <section id="view-equipment" class="view">
+      <div class="toolbar">
+        <input type="search" id="eq-q" placeholder="Szukaj sprzętu, marki, modelu…" aria-label="Szukaj sprzętu">
+        <button class="btn primary" id="btn-add-eq">+ Dodaj sprzęt</button>
+      </div>
+      <div class="eq-list" id="eq-list"></div>
+      <p class="empty" id="eq-empty" hidden>Dodaj pralkę, telewizor czy wiertarkę – z gwarancją, paragonem i instrukcją w jednym miejscu.</p>
+    </section>
+
+    <!-- WYDATKI -->
+    <section id="view-expenses" class="view">
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="Okres">
+          <button type="button" class="btn sm" data-months="3" aria-pressed="false">3 mies.</button>
+          <button type="button" class="btn sm" data-months="6" aria-pressed="true">6 mies.</button>
+          <button type="button" class="btn sm" data-months="12" aria-pressed="false">12 mies.</button>
+        </div>
+        <button class="btn primary push-right" data-open-receipt>🧾 Skanuj paragon</button>
+      </div>
+      <div class="stats" id="exp-stats"></div>
+      <div class="grid2">
+        <div class="card">
+          <h2>Wydatki na zakupy</h2>
+          <div class="colchart" id="chart-spent" role="img"></div>
+        </div>
+        <div class="card">
+          <h2>Zmarnowane (wartość wyrzuconych)</h2>
+          <div class="colchart waste" id="chart-wasted" role="img"></div>
+        </div>
+      </div>
+      <details class="card table-toggle">
+        <summary>Pokaż dane w tabeli</summary>
+        <div class="table-wrap plain"><table class="items" id="exp-table"></table></div>
+      </details>
+      <div class="grid2">
+        <div class="card">
+          <h2>Na co wydajemy</h2>
+          <div class="bars" id="exp-categories"></div>
+        </div>
+        <div class="card">
+          <h2>🗑 Najczęściej wyrzucane</h2>
+          <ul class="list" id="exp-wasted"></ul>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <h2>🧾 Ostatnie paragony</h2>
+          <ul class="list" id="exp-receipts"></ul>
+        </div>
+        <div class="card">
+          <h2>👥 Domownicy</h2>
+          <ul class="list" id="exp-users"></ul>
+        </div>
+      </div>
+      <p class="muted small">Wydatki liczą się z paragonów i zakupów z podaną ceną. Produkty dodane jako stan początkowy nie są wydatkiem.</p>
+    </section>
+
     <!-- USTAWIENIA -->
     <section id="view-settings" class="view">
+      <div class="grid2">
+        <div class="card">
+          <h2>👤 Moje konto</h2>
+          <p id="me-info"></p>
+          <form id="password-form" class="stack">
+            <input name="current_password" type="password" placeholder="Obecne hasło" autocomplete="current-password" required>
+            <input name="new_password" type="password" placeholder="Nowe hasło (min. 8 znaków)" autocomplete="new-password" minlength="8" required>
+            <span class="row"><button class="btn">Zmień hasło</button><button type="button" class="btn danger" id="btn-logout">Wyloguj</button></span>
+          </form>
+        </div>
+        <div class="card">
+          <h2>👥 Domownicy</h2>
+          <ul class="list" id="users-list"></ul>
+          <form id="user-form" class="stack admin-only">
+            <h3 class="small-h">Dodaj domownika</h3>
+            <span class="row">
+              <input name="name" placeholder="Imię" required maxlength="60">
+              <input name="login" placeholder="Login" required autocapitalize="none" spellcheck="false">
+            </span>
+            <span class="row">
+              <input name="password" type="password" placeholder="Hasło (min. 8 znaków)" required minlength="8" autocomplete="new-password">
+              <select name="role" aria-label="Rola"><option value="member">Domownik</option><option value="admin">Administrator</option></select>
+            </span>
+            <button class="btn primary">Dodaj</button>
+          </form>
+        </div>
+      </div>
       <div class="grid2">
         <div class="card">
           <h2>Kategorie</h2>
@@ -124,10 +237,10 @@
       </div>
       <div class="card">
         <h2>Kopia zapasowa</h2>
-        <p class="muted">Eksport zapisuje wszystkie dane do pliku JSON. Import <strong>zastępuje</strong> bieżące dane.</p>
+        <p class="muted">Eksport zapisuje zapasy (produkty, partie, kategorie, miejsca) do pliku JSON. Import <strong>zastępuje</strong> bieżące zapasy – sprzęty, dokumenty i konta zostają. Pełną kopię (z dokumentami) robi się na serwerze – patrz instrukcja instalacji.</p>
         <div class="row">
           <button class="btn" id="btn-export">Eksportuj JSON</button>
-          <label class="btn">Importuj JSON<input type="file" id="import-file" accept="application/json" hidden></label>
+          <label class="btn admin-only">Importuj JSON<input type="file" id="import-file" accept="application/json" hidden></label>
         </div>
       </div>
     </section>
@@ -151,7 +264,7 @@
       <label class="full">Nazwa*<input name="name" required maxlength="200"></label>
       <label>Kategoria<select name="category_id"></select></label>
       <label>Lokalizacja<select name="location_id"></select></label>
-      <label>Ilość<input name="quantity" type="number" min="0" step="any" value="1"></label>
+      <label data-single>Ilość<input name="quantity" type="number" min="0" step="any" value="1"></label>
       <label>Jednostka<input name="unit" value="szt." list="units"></label>
       <label>Stan minimalny<input name="min_quantity" type="number" min="0" step="any" value="0"></label>
       <label>Cena jedn. (zł)<input name="price" type="number" min="0" step="0.01"></label>
@@ -161,12 +274,26 @@
           <button type="button" class="btn" id="form-scan-barcode" title="Skanuj kod">📷</button>
         </span>
       </label>
-      <label class="full">Data ważności
+      <label class="full" data-single>Data ważności
         <span class="input-with-btn">
           <input name="expires_at" type="date">
           <button type="button" class="btn" id="form-scan-expiry" title="Odczytaj datę z etykiety">📷 Z etykiety</button>
         </span>
       </label>
+      <div class="full batches" id="item-batches" hidden>
+        <div class="batches-head">
+          <strong>Partie</strong>
+          <span class="muted small" id="batches-sum"></span>
+        </div>
+        <p class="muted small">Każda partia ma własną datę ważności. Zużycie zdejmuje najpierw partię z najkrótszym terminem.</p>
+        <ul class="batch-list" id="batch-list"></ul>
+        <div class="batch-add">
+          <input type="number" min="0" step="any" id="batch-add-qty" placeholder="Ilość" aria-label="Ilość nowej partii">
+          <input type="date" id="batch-add-date" aria-label="Data ważności nowej partii">
+          <input type="number" min="0" step="0.01" id="batch-add-total" placeholder="Zapłacono zł" aria-label="Kwota zakupu">
+          <button type="button" class="btn sm" id="batch-add-btn">+ Dodaj partię</button>
+        </div>
+      </div>
       <label class="full">Notatki<textarea name="notes" rows="2"></textarea></label>
       <p class="form-error" id="item-error" hidden></p>
       <div class="dialog-actions">
@@ -225,6 +352,103 @@
       <button class="btn" data-close>Anuluj</button>
       <button class="btn primary" id="ocr-use" disabled>Użyj daty</button>
     </div>
+  </dialog>
+
+  <!-- Szybkie zużycie -->
+  <dialog id="quick-dialog">
+    <h2>⚡ Szybkie zużycie</h2>
+    <p class="muted">Skanuj kody kolejnych opakowań – każdy skan zdejmuje 1 szt. z partii o najkrótszym terminie. Skaner otwiera się ponownie, aż go zamkniesz.</p>
+    <div class="seg" role="radiogroup" aria-label="Powód">
+      <label class="seg-opt"><input type="radio" name="quick-reason" value="used" checked> ✅ Zużyte</label>
+      <label class="seg-opt"><input type="radio" name="quick-reason" value="wasted"> 🗑 Wyrzucone</label>
+    </div>
+    <button class="btn primary wide" id="quick-scan">📷 Skanuj</button>
+    <ul class="list" id="quick-log"></ul>
+    <div class="dialog-actions"><button class="btn" data-close>Gotowe</button></div>
+  </dialog>
+
+  <!-- Paragon -->
+  <dialog id="receipt-dialog" class="wide-dialog">
+    <h2>🧾 Paragon</h2>
+    <div id="receipt-step1">
+      <p class="muted">Zrób zdjęcie całego paragonu (płasko, przy dobrym świetle). Aplikacja odczyta pozycje i dopasuje je do Twoich produktów – przed zapisem wszystko sprawdzisz.</p>
+      <div class="row">
+        <label class="btn primary">📷 Zdjęcie paragonu<input type="file" accept="image/*" capture="environment" id="receipt-photo" hidden></label>
+        <button type="button" class="btn" id="receipt-paste-toggle">⌨️ Wklej tekst</button>
+      </div>
+      <div id="receipt-paste" hidden>
+        <textarea id="receipt-text" rows="8" placeholder="Wklej tekst paragonu (np. z e-paragonu)…"></textarea>
+        <button type="button" class="btn" id="receipt-parse-btn">Odczytaj</button>
+      </div>
+      <p class="muted" id="receipt-status" role="status"></p>
+    </div>
+    <form id="receipt-form" hidden>
+      <div class="receipt-meta">
+        <label>Sklep<input name="shop" maxlength="100"></label>
+        <label>Data<input name="date" type="date" required></label>
+        <label>Suma (zł)<input name="total" type="number" step="0.01" min="0"></label>
+      </div>
+      <div class="receipt-lines" id="receipt-lines"></div>
+      <p class="muted small" id="receipt-summary"></p>
+      <button type="button" class="btn sm" id="receipt-add-line">+ Dodaj pozycję</button>
+      <details><summary>Rozpoznany tekst</summary><pre id="receipt-raw"></pre></details>
+      <p class="form-error" id="receipt-error" hidden></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn spacer" id="receipt-back">← Inne zdjęcie</button>
+        <button type="button" class="btn" data-close>Anuluj</button>
+        <button type="submit" class="btn primary">Zapisz zakupy</button>
+      </div>
+    </form>
+    <div class="dialog-actions" id="receipt-step1-actions"><button class="btn" data-close>Anuluj</button></div>
+  </dialog>
+
+  <!-- Szczegóły paragonu -->
+  <dialog id="receipt-view-dialog">
+    <h2 id="receipt-view-title">Paragon</h2>
+    <ul class="list" id="receipt-view-lines"></ul>
+    <div class="dialog-actions"><button class="btn" data-close>Zamknij</button></div>
+  </dialog>
+
+  <!-- Sprzęt -->
+  <dialog id="eq-dialog" class="wide-dialog">
+    <form id="eq-form">
+      <h2 id="eq-dialog-title">Nowy sprzęt</h2>
+      <input type="hidden" name="id">
+      <label class="full">Nazwa*<input name="name" required maxlength="200" placeholder="np. Pralka, Telewizor w salonie"></label>
+      <label>Marka<input name="brand" maxlength="100"></label>
+      <label>Model<input name="model" maxlength="100"></label>
+      <label>Nr seryjny<input name="serial_number" maxlength="100"></label>
+      <label>Miejsce<select name="location_id"></select></label>
+      <label>Data zakupu<input name="purchase_date" type="date"></label>
+      <label>Cena (zł)<input name="price" type="number" step="0.01" min="0"></label>
+      <label>Sklep<input name="shop" maxlength="100"></label>
+      <label>Gwarancja do<span class="input-with-btn"><input name="warranty_until" type="date"><select id="eq-warranty-years" aria-label="Szybko: lata gwarancji"><option value="">+ lata</option><option value="1">1 rok</option><option value="2">2 lata</option><option value="3">3 lata</option><option value="5">5 lat</option></select></span></label>
+      <label>Następny przegląd / serwis<input name="next_service_at" type="date"></label>
+      <label class="full">Notatki<textarea name="notes" rows="2" placeholder="np. wymiana filtra co 3 miesiące, numer serwisu"></textarea></label>
+      <div class="full docs" id="eq-docs" hidden>
+        <div class="batches-head"><strong>Dokumenty i zdjęcia</strong></div>
+        <ul class="list doc-list" id="eq-doc-list"></ul>
+        <div class="doc-upload">
+          <select id="doc-kind" aria-label="Rodzaj dokumentu">
+            <option value="receipt">🧾 Paragon / faktura</option>
+            <option value="warranty">📜 Gwarancja</option>
+            <option value="manual">📘 Instrukcja</option>
+            <option value="photo">📷 Zdjęcie</option>
+            <option value="other">📎 Inny</option>
+          </select>
+          <label class="btn">📎 Dodaj plik<input type="file" id="doc-file" accept="application/pdf,image/*,text/plain" multiple hidden></label>
+          <label class="btn">📷 Zrób zdjęcie<input type="file" id="doc-camera" accept="image/*" capture="environment" hidden></label>
+        </div>
+        <p class="muted small" id="doc-status" role="status">PDF, zdjęcia lub tekst, do 25 MB.</p>
+      </div>
+      <p class="muted small full" id="eq-docs-hint">Paragon, kartę gwarancyjną i instrukcję dodasz po zapisaniu.</p>
+      <p class="form-error" id="eq-error" hidden></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn danger spacer" id="eq-delete" hidden>Usuń sprzęt</button>
+        <button type="button" class="btn" data-close>Zamknij</button>
+        <button type="submit" class="btn primary">Zapisz</button>
+      </div>
+    </form>
   </dialog>
 
   <!-- Historia -->

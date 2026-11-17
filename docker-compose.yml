@@ -28,7 +28,9 @@ services:
       - "${APP_PORT:-3000}:3000"
     volumes:
       - images:/data/images
+      - uploads:/data/uploads
 
 volumes:
   pgdata:
   images:
+  uploads:

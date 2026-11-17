@@ -16,7 +16,7 @@ const PRODUCTS = {
   '5900000000022': { name: 'Bez zdjęcia', image_url: null },
 };
 
-let server, base, store, dir;
+let server, base, store, dir, token;
 const downloads = [];
 
 before(async () => {
@@ -27,9 +27,15 @@ before(async () => {
     downloads.push(url);
     return { ok: true, status: 200, headers: new Headers({ 'content-type': 'image/jpeg' }), arrayBuffer: async () => JPEG };
   };
-  server = http.createServer(createApp(store, { productLookup, imagesDir: dir, imageFetch }));
+  server = http.createServer(createApp(store, { productLookup, imagesDir: dir, uploadsDir: path.join(dir, 'uploads'), imageFetch }));
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${server.address().port}`;
+  const setup = await fetch(`${base}/api/auth/setup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Test', login: 'test', password: 'tajnehaslo' }),
+  });
+  token = (await setup.json()).token;
 });
 
 after(async () => {
@@ -41,7 +47,7 @@ after(async () => {
 const req = async (method, p, body) => {
   const res = await fetch(base + p, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
+    headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
   return { status: res.status, body: await res.json().catch(() => null) };
