@@ -11,6 +11,7 @@ struct ItemDetailView: View {
     @State private var amountText = "1"
     @State private var showingEdit = false
     @State private var confirmDelete = false
+    @State private var fetchingImage = false
     @State private var error: String?
 
     var body: some View {
@@ -44,6 +45,8 @@ struct ItemDetailView: View {
         List {
             Section {
                 VStack(spacing: 4) {
+                    ProductImage(item: item, size: 140)
+                        .padding(.bottom, 6)
                     Text(item.quantityText)
                         .font(.system(size: 40, weight: .bold, design: .rounded))
                         .monospacedDigit()
@@ -75,6 +78,33 @@ struct ItemDetailView: View {
                     }
                     .buttonStyle(.bordered)
                     .tint(.green)
+                }
+
+                Button(role: .destructive) { adjust(-1, reason: "wasted") } label: {
+                    Label("Wyrzuć (zmarnowane)", systemImage: "trash").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderless)
+                .disabled(item.quantity <= 0)
+            }
+
+            if let batches = item.batches, batches.count > 1 {
+                Section {
+                    ForEach(batches) { batch in
+                        HStack {
+                            Text("\(batch.quantity.amount) \(item.unit)").monospacedDigit()
+                            Spacer()
+                            Text(batch.expiresAt.flatMap(DateFormats.day.date(from:))?.formatted(date: .abbreviated, time: .omitted) ?? "bez daty")
+                                .foregroundStyle(.secondary)
+                        }
+                        .swipeActions {
+                            Button("Wyrzuć", role: .destructive) { removeBatch(batch, reason: "wasted") }
+                            Button("Zużyte") { removeBatch(batch, reason: "used") }.tint(.green)
+                        }
+                    }
+                } header: {
+                    Text("Partie")
+                } footer: {
+                    Text("Zużycie zdejmuje najpierw partię z najkrótszym terminem. Przesuń partię w lewo, aby ją zdjąć w całości.")
                 }
             }
 
@@ -115,7 +145,7 @@ struct ItemDetailView: View {
                         VStack(alignment: .leading) {
                             Text(entry.note.isEmpty ? "Zmiana" : entry.note)
                             if let date = entry.date {
-                                Text(date.formatted(date: .abbreviated, time: .shortened))
+                                Text(date.formatted(date: .abbreviated, time: .shortened) + (entry.userName.map { " · \($0)" } ?? ""))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -126,6 +156,23 @@ struct ItemDetailView: View {
                             .fontWeight(.semibold)
                             .foregroundStyle(entry.delta > 0 ? Color.green : Color.red)
                     }
+                }
+            }
+
+            if item.barcode != nil {
+                Section {
+                    Button {
+                        fetchImage()
+                    } label: {
+                        Label(item.image == nil ? "Pobierz zdjęcie z internetu" : "Pobierz zdjęcie ponownie",
+                              systemImage: "photo.badge.arrow.down")
+                    }
+                    .disabled(fetchingImage)
+                    if item.image != nil {
+                        Button("Usuń zdjęcie", role: .destructive) { removeImage() }
+                    }
+                } footer: {
+                    Text("Zdjęcia pochodzą z bazy Open Food Facts (głównie żywność).")
                 }
             }
 
@@ -150,14 +197,51 @@ struct ItemDetailView: View {
         } catch {}
     }
 
-    private func adjust(_ sign: Double) {
+    private func removeBatch(_ batch: Batch, reason: String) {
+        Task {
+            do {
+                item = try await model.api.removeBatch(batch.id, reason: reason)
+                model.didChange()
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
+    }
+
+    private func adjust(_ sign: Double, reason: String? = nil) {
         guard let amount = parseDecimal(amountText), amount > 0 else {
             error = "Podaj dodatnią ilość"
             return
         }
         Task {
             do {
-                item = try await model.api.adjust(itemId, delta: sign * amount)
+                item = try await model.api.adjust(itemId, delta: sign * amount, reason: reason)
+                model.didChange()
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
+    }
+
+    private func fetchImage() {
+        fetchingImage = true
+        Task {
+            defer { fetchingImage = false }
+            do {
+                let result = try await model.api.fetchImage(itemId)
+                item = result.item
+                if !result.found { error = "Nie znaleziono zdjęcia dla tego kodu w Open Food Facts." }
+                model.didChange()
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
+    }
+
+    private func removeImage() {
+        Task {
+            do {
+                item = try await model.api.removeImage(itemId)
                 model.didChange()
             } catch {
                 self.error = error.localizedDescription

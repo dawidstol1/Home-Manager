@@ -2,9 +2,8 @@
 
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const http = require('node:http');
+const { startApp, TEST_URL } = require('./helpers');
 const { Store } = require('../src/db');
-const { createApp } = require('../src/app');
 const { parseExpiry } = require('../src/expiry');
 const { createProductLookup } = require('../src/products');
 
@@ -58,8 +57,7 @@ describe('parseExpiry – odczyt daty ważności z tekstu etykiety', () => {
 });
 
 describe('API skanowania', () => {
-  let server;
-  let base;
+  let app;
   let store;
   let offCalls = 0;
 
@@ -78,26 +76,16 @@ describe('API skanowania', () => {
   };
 
   before(async () => {
-    store = new Store(':memory:');
-    const productLookup = createProductLookup(store, { fetchImpl: fakeFetch });
-    server = http.createServer(createApp(store, { productLookup }));
-    await new Promise((r) => server.listen(0, '127.0.0.1', r));
-    base = `http://127.0.0.1:${server.address().port}`;
+    // Wyszukiwarka produktów potrzebuje magazynu, a ten powstaje razem z aplikacją – stąd leniwe opakowanie.
+    let lookup;
+    app = await startApp({ productLookup: (code) => lookup(code) });
+    store = app.store;
+    lookup = createProductLookup(store, { fetchImpl: fakeFetch });
   });
 
-  after(() => {
-    server.close();
-    store.close();
-  });
+  after(() => app.close());
 
-  const req = async (method, path, body) => {
-    const res = await fetch(base + path, {
-      method,
-      headers: body ? { 'Content-Type': 'application/json' } : {},
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    return { status: res.status, body: await res.json().catch(() => null) };
-  };
+  const req = (...args) => app.req(...args);
 
   test('nieznany kod – podpowiedź z bazy produktów (i cache)', async () => {
     const first = await req('GET', '/api/barcode/5900000000001');
@@ -118,6 +106,8 @@ describe('API skanowania', () => {
   test('znany kod zwraca zasób i nie odpytuje bazy produktów', async () => {
     const created = await req('POST', '/api/items', { name: 'Kawa', quantity: 1, barcode: '5901234123457' });
     assert.equal(created.body.barcode, '5901234123457');
+    // Dodanie produktu z kodem uruchamia w tle szukanie zdjęcia – poczekaj, aż się skończy.
+    await new Promise((r) => setTimeout(r, 200));
     const calls = offCalls;
     const scan = await req('GET', '/api/barcode/5901234123457');
     assert.deepEqual(scan.body.items.map((i) => i.id), [created.body.id]);
@@ -146,12 +136,10 @@ describe('API skanowania', () => {
     assert.equal((await req('POST', '/api/expiry/parse', { text: 'brak daty' })).body.date, null);
   });
 
-  test('migracja dodaje kolumnę barcode do starej bazy', () => {
-    const old = new Store(':memory:', { seed: false });
-    old.db.exec('DROP INDEX idx_items_barcode; ALTER TABLE items DROP COLUMN barcode;');
-    old.migrate();
-    const cols = old.db.prepare('PRAGMA table_info(items)').all().map((c) => c.name);
-    assert.ok(cols.includes('barcode'));
-    old.close();
+  test('ponowne otwarcie bazy nie dubluje schematu ani słowników', async () => {
+    const again = await Store.open({ connectionString: TEST_URL, schema: store.schema, max: 1 });
+    const cats = await again.listDict('categories');
+    assert.equal(cats.filter((c) => c.name === 'Żywność').length, 1);
+    await again.close();
   });
 });

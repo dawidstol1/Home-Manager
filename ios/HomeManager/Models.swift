@@ -15,8 +15,14 @@ struct Item: Codable, Identifiable, Hashable {
     var expiresAt: String?
     var notes: String
     var barcode: String?
+    /// Nazwa pliku zdjęcia na serwerze (`/images/<plik>`), pobranego z Open Food Facts.
+    var image: String?
     var createdAt: String?
     var updatedAt: String?
+    /// Liczba partii (różne daty ważności) – w liście zasobów.
+    var batchCount: Int?
+    /// Partie od najkrótszego terminu – w szczegółach zasobu.
+    var batches: [Batch]?
 
     var isLow: Bool { minQuantity > 0 && quantity <= minQuantity }
 
@@ -29,6 +35,20 @@ struct Item: Codable, Identifiable, Hashable {
 
     var isExpired: Bool { (daysToExpiry ?? 1) < 0 }
     var isExpiringSoon: Bool { daysToExpiry.map { $0 >= 0 && $0 <= 7 } ?? false }
+}
+
+/// Partia produktu z własną datą ważności.
+struct Batch: Codable, Identifiable, Hashable {
+    let id: Int
+    var quantity: Double
+    var expiresAt: String?
+}
+
+/// Odpowiedź `POST /api/consume`.
+struct ConsumeResult: Decodable {
+    let item: Item
+    let historyIds: [Int]
+    let taken: Double
 }
 
 /// Pozycja listy zakupów (`/api/shopping-list`) – zasób z wyliczoną ilością do kupienia.
@@ -111,6 +131,12 @@ struct BarcodeLookup: Decodable {
     let product: ProductHint?
 }
 
+/// Odpowiedź `POST /api/items/:id/image`.
+struct ImageFetchResult: Decodable {
+    let item: Item
+    let found: Bool
+}
+
 /// Odpowiedź `/api/expiry/parse`.
 struct ExpiryParseResult: Decodable {
     let date: String?
@@ -135,6 +161,9 @@ struct HistoryEntry: Decodable, Identifiable, Hashable {
     let delta: Double
     let note: String
     let createdAt: String
+    var reason: String?
+    var amount: Double?
+    var userName: String?
 
     var date: Date? { DateFormats.sqlUTC.date(from: createdAt) }
 }

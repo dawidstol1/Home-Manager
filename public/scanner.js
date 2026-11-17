@@ -16,6 +16,8 @@ const Scanner = (() => {
     workerPath: `${CDN}/tesseract.js@${TESSERACT_VERSION}/dist/worker.min.js`,
     corePath: `${CDN}/tesseract.js-core@${TESSERACT_VERSION}`,
     langPath: `${CDN}/@tesseract.js-data/eng@1.0.0/4.0.0_best_int`,
+    // Paragony: polski model (polskie litery w nazwach produktów).
+    langPathPol: `${CDN}/@tesseract.js-data/pol@1.0.0/4.0.0_best_int`,
   };
   const FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'];
 
@@ -236,6 +238,50 @@ const Scanner = (() => {
     return workerPromise;
   }
 
+  let polWorkerPromise;
+  let polProgress = null;
+  async function polWorker(onProgress) {
+    polProgress = onProgress;
+    polWorkerPromise ??= (async () => {
+      await loadScript(TESSERACT.script);
+      const worker = await Tesseract.createWorker('pol', 1, {
+        workerPath: TESSERACT.workerPath,
+        corePath: TESSERACT.corePath,
+        langPath: TESSERACT.langPathPol,
+        logger: (m) => polProgress?.(m),
+      });
+      // Paragon to jedna kolumna tekstu – tryb „pojedynczy blok” zachowuje układ linii.
+      await worker.setParameters({ tessedit_pageseg_mode: '6', preserve_interword_spaces: '1' });
+      return worker;
+    })().catch((err) => {
+      polWorkerPromise = null;
+      throw err;
+    });
+    return polWorkerPromise;
+  }
+
+  /** Rozpoznaje tekst ze zdjęcia paragonu (po polsku). onStatus(tekst) – postęp do pokazania. */
+  async function recognizeReceipt(file, onStatus = () => {}) {
+    onStatus('Przygotowanie rozpoznawania tekstu…');
+    const worker = await polWorker((m) => {
+      if (m.status === 'recognizing text') onStatus(`Rozpoznawanie paragonu… ${Math.round(m.progress * 100)}%`);
+      else if (m.status?.startsWith('loading')) onStatus('Pobieranie polskiego modelu OCR (tylko za pierwszym razem)…');
+    });
+    const canvas = await fileToCanvas(file, 2400);
+    // Skala szarości i kontrast – termiczny druk paragonów bywa blady.
+    const ctx = canvas.getContext('2d');
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const px = img.data;
+    for (let i = 0; i < px.length; i += 4) {
+      const g = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+      const v = Math.max(0, Math.min(255, (g - 128) * 1.6 + 128));
+      px[i] = px[i + 1] = px[i + 2] = v;
+    }
+    ctx.putImageData(img, 0, 0);
+    const { data } = await worker.recognize(canvas);
+    return (data.text || '').trim();
+  }
+
   /**
    * Otwiera okno odczytu daty. `parse(text)` zwraca { date } (parser na serwerze).
    * Wynik: data RRRR-MM-DD albo null.
@@ -310,5 +356,5 @@ const Scanner = (() => {
     });
   }
 
-  return { scanBarcode, scanExpiry, canUseLiveCamera };
+  return { scanBarcode, scanExpiry, recognizeReceipt, canUseLiveCamera };
 })();

@@ -24,9 +24,30 @@ struct ContentView: View {
         .onAppear {
             if !model.isConfigured { tab = .settings }
         }
-        .task(id: model.revision) {
+        .onChange(of: model.isConfigured) { _, configured in
+            if !configured { tab = .settings }
+        }
+        .task(id: model.serverAddress) {
             guard model.isConfigured else { return }
+            await model.checkAuth()
+        }
+        .task(id: model.revision) {
+            guard model.isConfigured, model.authState == .loggedIn else { return }
             try? await model.loadDictionaries()
+        }
+        // Ekran logowania, gdy serwer jest ustawiony, ale nikt nie jest zalogowany.
+        .fullScreenCover(isPresented: Binding(
+            get: { model.isConfigured && (model.authState == .needsLogin || model.authState == .needsSetup) },
+            set: { _ in }
+        )) {
+            LoginView()
+                .environment(model)
+                .interactiveDismissDisabled()
+                .overlay(alignment: .topLeading) {
+                    // Pozwala zmienić adres serwera, gdy wpisano zły.
+                    Button("Zmień serwer") { model.setServerAddress("") }
+                        .padding()
+                }
         }
     }
 }

@@ -2,28 +2,69 @@
 
 const http = require('node:http');
 const path = require('node:path');
-const fs = require('node:fs');
-const { Store } = require('./db');
+const { Store, DEFAULT_URL } = require('./db');
 const { createApp } = require('./app');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
-const DB_FILE = process.env.DB_FILE || path.join(__dirname, '..', 'data', 'home-manager.db');
+const DATABASE_URL = process.env.DATABASE_URL || DEFAULT_URL;
+const IMAGES_DIR = process.env.IMAGES_DIR || path.join(__dirname, '..', 'data', 'images');
+const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '..', 'data', 'uploads');
+// Za reverse proxy (nginx): ufaj nagłówkom X-Forwarded-For / X-Forwarded-Proto.
+const TRUST_PROXY = ['1', 'true', 'yes'].includes(String(process.env.TRUST_PROXY).toLowerCase());
+// Wymuszenie flagi Secure ciasteczka (domyślnie: automatycznie, gdy połączenie jest po HTTPS).
+const COOKIE_SECURE = process.env.COOKIE_SECURE === undefined ? undefined : ['1', 'true', 'yes'].includes(process.env.COOKIE_SECURE.toLowerCase());
 
-fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
-const store = new Store(DB_FILE);
-const server = http.createServer(createApp(store));
-
-server.listen(PORT, HOST, () => {
-  console.log(`Manager zasobów domowych działa: http://${HOST}:${PORT}`);
-  console.log(`Baza danych: ${DB_FILE}`);
-});
-
-function shutdown() {
-  server.close(() => {
-    store.close();
-    process.exit(0);
-  });
+/** Adres bazy bez hasła – do logów. */
+function safeUrl(url) {
+  try {
+    const u = new URL(url);
+    if (u.password) u.password = '***';
+    return u.toString();
+  } catch {
+    return '(nieprawidłowy DATABASE_URL)';
+  }
 }
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+
+async function main() {
+  let store;
+  // Baza w kontenerze może startować chwilę dłużej niż aplikacja – kilka prób połączenia.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      store = await Store.open({ connectionString: DATABASE_URL });
+      break;
+    } catch (err) {
+      if (attempt >= 10) {
+        console.error(`Nie udało się połączyć z PostgreSQL (${safeUrl(DATABASE_URL)}): ${err.message}`);
+        process.exit(1);
+      }
+      console.log(`Czekam na PostgreSQL… (${attempt}/10: ${err.code || err.message})`);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+
+  const server = http.createServer(createApp(store, {
+    imagesDir: IMAGES_DIR,
+    uploadsDir: UPLOADS_DIR,
+    trustProxy: TRUST_PROXY,
+    secureCookies: COOKIE_SECURE,
+  }));
+  server.listen(PORT, HOST, () => {
+    console.log(`Manager zasobów domowych działa: http://${HOST}:${PORT}`);
+    console.log(`Baza danych: ${safeUrl(DATABASE_URL)}`);
+    store.countUsers().then((n) => {
+      if (!n) console.log('Brak kont – otwórz aplikację w przeglądarce i utwórz konto administratora.');
+    });
+  });
+
+  const shutdown = () => {
+    server.close(async () => {
+      await store.close();
+      process.exit(0);
+    });
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+}
+
+main();

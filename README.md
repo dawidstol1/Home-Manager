@@ -15,29 +15,86 @@ ile zostało, kiedy traci ważność i co trzeba dokupić.
 - Responsywny interfejs, tryb ciemny zgodny z ustawieniami systemu
 - **Skanowanie etykiet** – kod kreskowy (EAN/UPC/QR…) rozpoznaje znany produkt (szybkie +1/−1),
   a nowy podpowiada nazwę z bazy Open Food Facts; datę ważności można odczytać ze zdjęcia etykiety (OCR)
+- **Zdjęcia produktów** pobierane automatycznie z Open Food Facts po kodzie kreskowym i zapisywane lokalnie
 - **iOS:** natywna aplikacja SwiftUI (`ios/`) oraz PWA do zainstalowania z Safari
+- **Partie z różnymi datami ważności** – np. 3 jogurty z trzema terminami; zużycie zdejmuje najpierw najstarszą partię (FIFO)
+- **Szybkie zużycie skanerem** – skanujesz kolejne opakowania, każde to −1 szt. (zużyte albo wyrzucone), z możliwością cofnięcia
+- **Wydatki i marnowanie** – wykresy wydatków miesięcznie, podział na kategorie, wartość wyrzuconego jedzenia, najczęściej wyrzucane produkty
+- **Skan paragonu** – zdjęcie paragonu → OCR → pozycje dopasowane do produktów (aplikacja zapamiętuje dopasowania), zapis zakupów jednym przyciskiem
+- **Konta domowników** – logowanie, administrator dodaje domowników; historia pokazuje, kto co zużył lub kupił
+- **Sprzęty i dokumenty** – gwarancje, przeglądy, paragony, instrukcje (PDF/zdjęcia) przy każdym sprzęcie, przypomnienia na pulpicie
 
-## Wymagania
+## Instalacja na własnym serwerze (Ubuntu, bez Dockera)
 
-- Node.js **22.13+** (korzysta z wbudowanego modułu `node:sqlite`)
-- Brak zewnętrznych zależności – nie trzeba uruchamiać `npm install`
+Pełna instrukcja krok po kroku – LXC z Ubuntu 26.04, PostgreSQL na osobnym serwerze, systemd, nginx, HTTPS,
+kopie zapasowe: **[docs/INSTALACJA-UBUNTU.md](docs/INSTALACJA-UBUNTU.md)**. Gotowe pliki konfiguracyjne są w `deploy/`.
 
-## Uruchomienie
+Po pierwszym uruchomieniu aplikacja prosi o utworzenie konta administratora.
+
+## Uruchomienie – najprościej (Docker)
+
+Potrzebny jest tylko [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows / macOS) albo Docker na Linuksie.
 
 ```bash
-npm start          # http://127.0.0.1:3000
+docker compose up -d        # PostgreSQL + aplikacja → http://localhost:3000
+docker compose logs -f app  # podgląd logów
+docker compose down         # zatrzymanie (dane zostają w wolumenach)
+```
+
+Dane bazy PostgreSQL, zdjęcia produktów i dokumenty są trzymane w wolumenach Dockera (`pgdata`, `images`, `uploads`), więc przetrwają
+restart i aktualizację. Hasło bazy można zmienić zmienną `POSTGRES_PASSWORD` (np. w pliku `.env` obok
+`docker-compose.yml`) – **przed** pierwszym uruchomieniem.
+
+## Uruchomienie bez Dockera
+
+Wymagania: Node.js **22.13+** i PostgreSQL **13+** (testowane na 16).
+
+```bash
+# jednorazowo: użytkownik i baza w PostgreSQL
+sudo -u postgres psql -c "CREATE ROLE homemanager LOGIN PASSWORD 'homemanager';"
+sudo -u postgres psql -c "CREATE DATABASE homemanager OWNER homemanager;"
+
+npm install
+npm start          # http://127.0.0.1:3000 – tabele tworzą się same przy pierwszym starcie
 npm run dev        # tryb z automatycznym przeładowaniem
-npm test           # testy API
+```
+
+Testy potrzebują osobnej bazy `homemanager_test` (każdy plik testów tworzy w niej i usuwa własny schemat):
+
+```bash
+sudo -u postgres psql -c "CREATE DATABASE homemanager_test OWNER homemanager;"
+npm test
 ```
 
 Zmienne środowiskowe:
 
 | Zmienna   | Domyślnie                   | Opis                       |
 |-----------|-----------------------------|----------------------------|
+| `DATABASE_URL` | `postgres://homemanager:homemanager@localhost:5432/homemanager` | Połączenie z PostgreSQL |
+| `TEST_DATABASE_URL` | `…/homemanager_test` | Baza dla `npm test` |
 | `PORT`    | `3000`                      | Port serwera               |
 | `HOST`    | `127.0.0.1`                 | Adres nasłuchu (`0.0.0.0`, by udostępnić w sieci domowej) |
-| `DB_FILE` | `data/home-manager.db`      | Ścieżka do pliku bazy SQLite |
-| `PRODUCT_LOOKUP` | włączone             | `off` wyłącza podpowiedzi nazw z Open Food Facts |
+| `PRODUCT_LOOKUP` | włączone             | `off` wyłącza podpowiedzi nazw i zdjęcia z Open Food Facts |
+| `IMAGES_DIR` | `data/images`            | Katalog na pobrane zdjęcia produktów |
+| `UPLOADS_DIR` | `data/uploads`          | Katalog na dokumenty sprzętów (paragony, gwarancje, instrukcje) |
+| `TRUST_PROXY` | wyłączone               | `1` za reverse proxy (nginx): prawdziwy IP i wykrywanie HTTPS z nagłówków `X-Forwarded-*` |
+| `COOKIE_SECURE` | automatycznie         | `1` wymusza flagę `Secure` ciasteczka sesji |
+| `REPORT_TZ` | `Europe/Warsaw`           | Strefa czasowa raportów wydatków |
+
+**Baza danych:** `items` (produkty), `batches` (partie z datami ważności – stan produktu to ich suma),
+`history` (każda zmiana stanu: powód zakup/zużycie/wyrzucenie/korekta, kwota, kto), `receipts` i `receipt_aliases`
+(paragony i zapamiętane dopasowania nazw), `equipment` i `documents` (sprzęty i ich pliki), `users` i `sessions`
+(konta, w bazie tylko skróty haseł i tokenów), `categories`, `locations`, `barcode_cache`. Schemat aktualizuje się
+sam przy starcie – także ze starszej wersji, bez utraty danych. Zmiany ilości są wykonywane w transakcji z blokadą
+wiersza, więc kilka osób może jednocześnie zużywać i dokupować ten sam produkt bez gubienia zmian.
+Kopia zapasowa: przycisk „Eksportuj JSON” w Ustawieniach albo `pg_dump homemanager > kopia.sql`.
+
+## Interfejs
+
+- **Kafelki ze zdjęciami** (domyślnie) albo **tabela** – przełącznik nad listą, wybór jest zapamiętywany.
+- **Miejsca** – przyciski „Wszystkie / Kuchnia / Spiżarnia…” z liczbą produktów do szybkiego filtrowania.
+- **Na telefonie** – dolny pasek nawigacji z licznikiem zakupów i pływający przycisk 📷 do skanowania.
+- Usuwanie produktu jest też dostępne w formularzu edycji.
 
 ## Skanowanie etykiet
 
@@ -48,6 +105,11 @@ Zmienne środowiskowe:
   [Open Food Facts](https://world.openfoodfacts.org), z podpowiedzianą nazwą i kategorią.
 
 Kod można też zeskanować bezpośrednio w formularzu (pole „Kod kreskowy”).
+
+**Zdjęcia produktów** – gdy dodajesz produkt z kodem kreskowym, serwer w tle szuka go w Open Food Facts,
+pobiera zdjęcie opakowania i zapisuje je w `data/images/` (w Dockerze: wolumen `images`) (potem działa bez internetu). W formularzu produktu są
+przyciski „Pobierz zdjęcie z internetu” i „Usuń zdjęcie”, a w Ustawieniach „Pobierz brakujące zdjęcia” dla produktów
+dodanych wcześniej. Zdjęcia są dostępne głównie dla żywności i napojów; pozostałe produkty mają literę zamiast zdjęcia.
 
 **Data ważności (OCR)** – w formularzu przycisk „📷 Z etykiety” (web) / „Odczytaj datę z etykiety” (iOS).
 Rozpoznany tekst trafia do parsera na serwerze, który rozumie m.in. `12.05.2027`, `12/05/27`, `2027-05-12`,
@@ -72,6 +134,11 @@ Uwagi:
 ### Aplikacja natywna (SwiftUI)
 
 Klient REST API tego serwera – dane są wspólne z wersją webową, więc cała rodzina widzi te same zapasy.
+
+Po wpisaniu adresu serwera aplikacja prosi o zalogowanie (to samo konto co w przeglądarce; token sesji trzymany
+jest w pęku kluczy iOS). Aplikacja iOS obsługuje zasoby, skanowanie, partie (podgląd, zdejmowanie całych partii),
+wyrzucanie i listę zakupów; **paragony, wydatki, sprzęty z dokumentami i zarządzanie domownikami** są na razie
+w wersji webowej (PWA).
 
 Wymagania: Mac z **Xcode 16+**, iOS **17+**.
 
@@ -115,12 +182,26 @@ Wersja webowa działa też jako aplikacja na ekranie głównym: otwórz adres se
 Tryb offline (service worker – podgląd ostatnio pobranych danych) wymaga HTTPS lub `localhost`;
 przez zwykłe HTTP w sieci lokalnej aplikacja działa, ale tylko online.
 
+## Konta i bezpieczeństwo
+
+- Pierwsza osoba zakłada konto **administratora**; kolejnych domowników dodaje administrator (Więcej → Domownicy).
+- Hasła: scrypt z solą. Sesja: losowy token w ciasteczku `HttpOnly; SameSite=Lax` (przeglądarka) albo w nagłówku
+  `Authorization: Bearer` (aplikacja iOS), ważna 30 dni od ostatniego użycia.
+- Ochrona przed zgadywaniem haseł (10 prób / 15 min na adres IP) i przed CSRF (sprawdzanie nagłówka `Origin`).
+- Dokumenty są dostępne tylko po zalogowaniu; typ pliku jest sprawdzany po zawartości (PDF, JPG, PNG, WEBP, HEIC, tekst).
+- Zapomniane hasło: `node src/cli.js reset-password <login>` na serwerze.
+
 ## Struktura projektu
 
 ```
 src/
-  db.js       – schemat bazy, migracje, walidacja i logika (klasa Store)
+  db.js       – PostgreSQL: schemat, migracje, walidacja i logika (klasa Store)
+  auth.js     – hasła, sesje, ciasteczka, limit prób logowania
+  receipt.js  – odczyt pozycji z tekstu paragonu
+  files.js    – przechowywanie dokumentów sprzętów
+  cli.js      – narzędzia administracyjne (reset hasła, lista kont)
   products.js – podpowiedzi produktów po kodzie (Open Food Facts + cache)
+  images.js   – pobieranie i przechowywanie zdjęć produktów
   expiry.js   – odczyt daty ważności z tekstu etykiety
   app.js      – routing REST API i serwowanie plików statycznych
   server.js   – punkt startowy serwera HTTP
@@ -129,7 +210,11 @@ public/       – interfejs (HTML, CSS, JS bez frameworków) + manifest PWA i se
   vendor/     – dołączona biblioteka ZXing (Apache-2.0)
 ios/          – natywna aplikacja iOS (SwiftUI)
 test/         – testy API (node:test)
-data/         – plik bazy danych (ignorowany przez git)
+data/         – zdjęcia produktów (ignorowane przez git)
+Dockerfile, docker-compose.yml – uruchomienie z PostgreSQL jednym poleceniem
+deploy/       – systemd, nginx i przykładowa konfiguracja dla instalacji bez Dockera
+docs/         – instrukcja instalacji na Ubuntu
+tools/preview/ – podgląd w przeglądarce: serwer + PostgreSQL (PGlite) w jednej stronie, `npm run build`
 ```
 
 ## REST API
@@ -144,14 +229,38 @@ data/         – plik bazy danych (ignorowany przez git)
 | GET / POST | `/api/categories`, `/api/locations` | Słowniki |
 | DELETE | `/api/categories/:id`, `/api/locations/:id` | Usunięcie pozycji słownika |
 | GET | `/api/barcode/:kod` lub `/api/barcode?code=` | Zasoby z danym kodem + podpowiedź produktu |
+| POST / DELETE | `/api/items/:id/image` | Pobierz zdjęcie z Open Food Facts / usuń zdjęcie |
+| POST | `/api/images/fill` | Pobierz brakujące zdjęcia dla wszystkich produktów z kodem |
+| GET | `/images/:plik` | Zapisane zdjęcie produktu |
 | POST | `/api/expiry/parse` | Data ważności z tekstu etykiety `{ "text": "..." }` → `{ "date": "2027-05-12" }` |
 | GET | `/api/stats` | Statystyki pulpitu |
 | GET | `/api/shopping-list` | Lista zakupów |
-| GET / POST | `/api/export`, `/api/import` | Kopia zapasowa JSON |
+| GET / POST | `/api/export`, `/api/import` | Kopia zapasowa zapasów (JSON; import tylko administrator) |
+| POST | `/api/items/:id/adjust` | Rozszerzone: `{ "delta": 2, "expires_at": "2027-01-10", "total": 9.98 }` (zakup partii) lub `{ "delta": -1, "reason": "wasted" }` |
+| PATCH / DELETE | `/api/batches/:id` (`?reason=used\|wasted`) | Edycja / zdjęcie całej partii |
+| POST | `/api/consume` | Szybkie zużycie po kodzie `{ "barcode": "590…", "reason": "used\|wasted" }` |
+| POST | `/api/history/:id/undo` | Cofnięcie zużycia / wyrzucenia |
+| POST | `/api/receipts/parse` | Tekst paragonu → pozycje z podpowiedziami produktów |
+| GET / POST | `/api/receipts` | Lista paragonów / zapis paragonu (zakupy) |
+| GET | `/api/receipts/:id` | Pozycje paragonu |
+| GET | `/api/reports?months=6` | Wydatki, marnowanie, kategorie, domownicy |
+| GET / POST | `/api/equipment` | Sprzęty |
+| GET / PUT / PATCH / DELETE | `/api/equipment/:id` | Sprzęt z listą dokumentów |
+| POST | `/api/equipment/:id/documents?kind=warranty&name=plik.pdf` | Wysłanie pliku (treść żądania = plik) |
+| GET | `/api/documents/:id/file` | Pobranie dokumentu |
+| PATCH / DELETE | `/api/documents/:id` | Zmiana nazwy/rodzaju / usunięcie |
+| GET | `/api/auth/status` | Czy trzeba założyć pierwsze konto, kto jest zalogowany |
+| POST | `/api/auth/setup`, `/api/auth/login`, `/api/auth/logout` | Pierwsze konto / logowanie (zwraca `token`) / wylogowanie |
+| POST | `/api/auth/password` | Zmiana własnego hasła |
+| GET / POST / PATCH / DELETE | `/api/users`, `/api/users/:id` | Domownicy (zmiany – administrator) |
+
+Wszystkie ścieżki `/api/*` poza `auth/status`, `auth/setup` i `auth/login` wymagają zalogowania.
 
 Przykład:
 
 ```bash
-curl -X POST localhost:3000/api/items -H 'Content-Type: application/json' \
+TOKEN=$(curl -s -X POST localhost:3000/api/auth/login -H 'Content-Type: application/json' \
+  -d '{"login":"admin","password":"twojehaslo"}' | jq -r .token)
+curl -X POST localhost:3000/api/items -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"name":"Mąka","quantity":2,"unit":"kg","min_quantity":1}'
 ```

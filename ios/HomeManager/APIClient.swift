@@ -24,6 +24,8 @@ enum APIError: LocalizedError {
 struct APIClient {
     var baseURL: URL
     var session: URLSession = .shared
+    /// Token sesji (nagłówek `Authorization: Bearer`). Bez niego serwer odpowiada 401.
+    var token: String?
 
     private static let decoder: JSONDecoder = {
         let d = JSONDecoder()
@@ -72,12 +74,66 @@ struct APIClient {
         try await sendNoContent("DELETE", "items/\(id)")
     }
 
-    func adjust(_ id: Int, delta: Double, note: String = "") async throws -> Item {
-        struct Body: Encodable { let delta: Double; let note: String }
-        return try await send("POST", "items/\(id)/adjust", body: Body(delta: delta, note: note))
+    /// `reason`: `used` / `wasted` (zużycie) albo `purchase` (dokupienie); nil = domyślny powód serwera.
+    func adjust(_ id: Int, delta: Double, note: String = "", reason: String? = nil) async throws -> Item {
+        struct Body: Encodable { let delta: Double; let note: String; let reason: String? }
+        return try await send("POST", "items/\(id)/adjust", body: Body(delta: delta, note: note, reason: reason))
+    }
+
+    /// Zdejmuje całą partię (`used` – zużyta, `wasted` – wyrzucona).
+    func removeBatch(_ batchId: Int, reason: String) async throws -> Item {
+        var req = URLRequest(url: url("batches/\(batchId)", query: [URLQueryItem(name: "reason", value: reason)]))
+        req.httpMethod = "DELETE"
+        return try await perform(req)
+    }
+
+    /// Szybkie zużycie po zeskanowaniu kodu: −1 z partii o najkrótszym terminie.
+    func consume(barcode: String, reason: String = "used") async throws -> ConsumeResult {
+        struct Body: Encodable { let barcode: String; let reason: String }
+        return try await send("POST", "consume", body: Body(barcode: barcode, reason: reason))
+    }
+
+    // MARK: - Konto
+
+    func authStatus() async throws -> AuthStatus { try await get("auth/status") }
+
+    func login(login: String, password: String) async throws -> LoginResult {
+        struct Body: Encodable { let login: String; let password: String }
+        return try await send("POST", "auth/login", body: Body(login: login, password: password))
+    }
+
+    /// Pierwsze uruchomienie serwera: zakłada konto administratora.
+    func setup(name: String, login: String, password: String) async throws -> LoginResult {
+        struct Body: Encodable { let name: String; let login: String; let password: String }
+        return try await send("POST", "auth/setup", body: Body(name: name, login: login, password: password))
+    }
+
+    func logout() async throws {
+        struct Empty: Encodable {}
+        struct Ok: Decodable {}
+        let _: Ok = try await send("POST", "auth/logout", body: Empty())
     }
 
     func history(_ id: Int) async throws -> [HistoryEntry] { try await get("items/\(id)/history") }
+
+    // MARK: - Zdjęcia
+
+    /// Adres zdjęcia produktu zapisanego na serwerze.
+    func imageURL(_ file: String) -> URL {
+        baseURL.appending(path: "images").appending(path: file)
+    }
+
+    /// Szuka zdjęcia w Open Food Facts po kodzie kreskowym i zapisuje je na serwerze.
+    func fetchImage(_ id: Int) async throws -> ImageFetchResult {
+        struct Empty: Encodable {}
+        return try await send("POST", "items/\(id)/image", body: Empty())
+    }
+
+    func removeImage(_ id: Int) async throws -> Item {
+        var req = URLRequest(url: url("items/\(id)/image"))
+        req.httpMethod = "DELETE"
+        return try await perform(req)
+    }
 
     // MARK: - Skanowanie
 
@@ -148,6 +204,7 @@ struct APIClient {
     private func fetch(_ request: URLRequest) async throws -> Data {
         var request = request
         request.timeoutInterval = 10
+        if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         let data: Data
         let response: URLResponse
         do {
@@ -159,8 +216,16 @@ struct APIClient {
         guard (200..<300).contains(status) else {
             struct ErrorBody: Decodable { let error: String }
             let message = (try? Self.decoder.decode(ErrorBody.self, from: data))?.error ?? "Błąd serwera (\(status))"
+            if status == 401 {
+                await MainActor.run { NotificationCenter.default.post(name: .sessionExpired, object: nil) }
+            }
             throw APIError.server(status: status, message: message)
         }
         return data
     }
+}
+
+extension Notification.Name {
+    /// Serwer odrzucił token (wylogowanie, zmiana hasła) – aplikacja pokazuje ekran logowania.
+    static let sessionExpired = Notification.Name("HomeManager.sessionExpired")
 }

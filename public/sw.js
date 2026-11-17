@@ -2,7 +2,7 @@
 
 // Service worker: interfejs działa offline, a ostatnio pobrane dane API
 // są dostępne do podglądu bez połączenia (tylko odczyt).
-const VERSION = 'v2';
+const VERSION = 'v6';
 const SHELL_CACHE = `shell-${VERSION}`;
 const API_CACHE = `api-${VERSION}`;
 const SHELL = [
@@ -26,6 +26,9 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   const url = new URL(req.url);
   if (url.origin !== location.origin || req.method !== 'GET') return;
+
+  // Konta i pliki dokumentów zawsze z sieci – bez zapisywania na urządzeniu.
+  if (url.pathname.startsWith('/api/auth/') || url.pathname.startsWith('/api/documents/')) return;
 
   if (url.pathname.startsWith('/api/')) {
     // Network-first: świeże dane, a w razie braku sieci – ostatnia kopia.
