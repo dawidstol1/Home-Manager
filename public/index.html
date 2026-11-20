@@ -71,6 +71,10 @@
     <symbol id="i-spray" viewBox="0 0 24 24"><path d="M8 10h6v11H8z"/><path d="M9.5 10V7h3v3M12.5 7.5h3"/><path d="M18 5h.01M20 7h.01M18 9h.01M20 3h.01"/></symbol>
     <symbol id="i-bandage" viewBox="0 0 24 24"><rect x="2" y="7.5" width="20" height="9" rx="4.5" transform="rotate(-45 12 12)"/><path d="M10.5 10.5h.01M13.5 13.5h.01M10.5 13.5h.01M13.5 10.5h.01"/></symbol>
     <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5V5a2 2 0 0 1 2-2h14v15H6a2 2 0 0 0-2 2 2 2 0 0 0 2 2h14"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16.5" rx="3"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/><path d="M7.5 13.5h.01M12 13.5h.01M16.5 13.5h.01M7.5 17h.01M12 17h.01"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 2.5 20.5 6 17 9.5"/><path d="M3.5 11.5V10a4 4 0 0 1 4-4h13"/><path d="M7 21.5 3.5 18 7 14.5"/><path d="M20.5 12.5V14a4 4 0 0 1-4 4h-13"/></symbol>
+    <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></symbol>
     <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3c.5 4.5 2.5 6.5 7 7-4.5.5-6.5 2.5-7 7-.5-4.5-2.5-6.5-7-7 4.5-.5 6.5-2.5 7-7z"/><path d="M19 15.5c.2 1.6.9 2.3 2.5 2.5-1.6.2-2.3.9-2.5 2.5-.2-1.6-.9-2.3-2.5-2.5 1.6-.2 2.3-.9 2.5-2.5z"/></symbol>
   </svg>
 
@@ -100,9 +104,10 @@
       <nav class="tabs" role="tablist" aria-label="Sekcje">
         <span class="nav-label">Dom</span>
         <button class="tab active" data-view="dashboard" role="tab"><svg class="ico"><use href="#i-dashboard"/></svg><span>Pulpit</span></button>
+        <button class="tab" data-view="calendar" role="tab"><svg class="ico"><use href="#i-calendar"/></svg><span>Kalendarz</span><span class="tab-badge primary" id="cal-badge" hidden></span></button>
         <button class="tab" data-view="items" role="tab"><svg class="ico"><use href="#i-box"/></svg><span>Zasoby</span></button>
         <button class="tab" data-view="pharmacy" role="tab"><svg class="ico"><use href="#i-pill"/></svg><span>Apteka</span><span class="tab-badge danger" id="med-badge" hidden></span></button>
-        <button class="tab" data-view="shopping" role="tab"><svg class="ico"><use href="#i-cart"/></svg><span>Zakupy</span><span class="tab-badge" id="shop-badge" hidden></span></button>
+        <button class="tab tab-secondary" data-view="shopping" role="tab"><svg class="ico"><use href="#i-cart"/></svg><span>Zakupy</span><span class="tab-badge" id="shop-badge" hidden></span></button>
         <button class="tab tab-secondary" data-view="equipment" role="tab"><svg class="ico"><use href="#i-wrench"/></svg><span>Sprzęty</span><span class="tab-badge" id="eq-badge" hidden></span></button>
         <span class="nav-label">Analiza</span>
         <button class="tab tab-secondary" data-view="expenses" role="tab"><svg class="ico"><use href="#i-chart"/></svg><span>Wydatki</span></button>
@@ -140,6 +145,10 @@
               <button type="button" class="hero-btn" data-quick="receipt"><svg class="ico"><use href="#i-receipt"/></svg><span>Paragon</span></button>
               <button type="button" class="hero-btn" data-quick="medicine"><svg class="ico"><use href="#i-pill"/></svg><span>Podaj lek</span></button>
             </div>
+          </div>
+          <div class="card" id="dash-cal-card">
+            <div class="card-title"><span class="ct-ico"><svg class="ico"><use href="#i-calendar"/></svg></span><h2>Najbliższe dni</h2><button type="button" class="link-btn" data-goto="calendar">Kalendarz <svg class="ico"><use href="#i-chevron"/></svg></button></div>
+            <div class="agenda compact" id="dash-cal"></div>
           </div>
           <div class="stats" id="stats"></div>
           <div class="grid2">
@@ -236,6 +245,43 @@
           <p class="muted small med-note">Aplikacja nie zastępuje ulotki ani porady lekarza lub farmaceuty.</p>
         </section>
 
+        <!-- KALENDARZ -->
+        <section id="view-calendar" class="view">
+          <div class="cal-toolbar">
+            <div class="cal-nav">
+              <button type="button" class="icon-btn" id="cal-prev" aria-label="Poprzedni miesiąc"><svg class="ico"><use href="#i-chevron-left"/></svg></button>
+              <h2 class="cal-title" id="cal-title"></h2>
+              <button type="button" class="icon-btn" id="cal-next" aria-label="Następny miesiąc"><svg class="ico"><use href="#i-chevron"/></svg></button>
+              <button type="button" class="btn sm" id="cal-today">Dziś</button>
+            </div>
+            <div class="seg-ctl" role="group" aria-label="Widok kalendarza">
+              <button type="button" data-cal-mode="month" aria-pressed="true"><svg class="ico"><use href="#i-calendar"/></svg><span>Miesiąc</span></button>
+              <button type="button" data-cal-mode="list" aria-pressed="false"><svg class="ico"><use href="#i-list"/></svg><span>Lista</span></button>
+            </div>
+            <button class="btn primary push-right" id="btn-event-add"><svg class="ico"><use href="#i-plus"/></svg>Dodaj wpis</button>
+          </div>
+          <div class="items-head">
+            <div class="loc-chips" id="cal-filters" role="group" aria-label="Czyje wpisy"></div>
+            <label class="switch"><input type="checkbox" id="cal-home" checked><span class="switch-ui" aria-hidden="true"></span>Terminy z domu</label>
+          </div>
+          <div class="cal-layout" id="cal-month">
+            <div class="cal-grid-wrap">
+              <div class="cal-weekdays"><span>Pn</span><span>Wt</span><span>Śr</span><span>Cz</span><span>Pt</span><span>So</span><span>Nd</span></div>
+              <div class="cal-grid" id="cal-grid"></div>
+            </div>
+            <aside class="cal-day card">
+              <div class="cal-day-head">
+                <div><p class="eyebrow" id="cal-day-week"></p><h2 id="cal-day-title"></h2></div>
+                <button type="button" class="btn sm icon" id="cal-day-add" aria-label="Dodaj wpis na ten dzień" title="Dodaj wpis na ten dzień"><svg class="ico"><use href="#i-plus"/></svg></button>
+              </div>
+              <div class="agenda" id="cal-day-list"></div>
+            </aside>
+          </div>
+          <div class="card cal-list" id="cal-list" hidden>
+            <div class="agenda" id="cal-agenda"></div>
+          </div>
+        </section>
+
         <!-- LISTA ZAKUPÓW -->
         <section id="view-shopping" class="view">
           <div class="card">
@@ -315,6 +361,7 @@
         <!-- USTAWIENIA / WIĘCEJ -->
         <section id="view-settings" class="view">
           <div class="hub mobile-only">
+            <button type="button" class="hub-tile" data-goto="shopping"><span class="ht-ico warm"><svg class="ico"><use href="#i-cart"/></svg></span><span><strong>Lista zakupów</strong><span class="muted small">Co się kończy, paragony</span></span><span class="tab-badge" id="shop-badge-hub" hidden></span><svg class="ico chev"><use href="#i-chevron"/></svg></button>
             <button type="button" class="hub-tile" data-goto="equipment"><span class="ht-ico"><svg class="ico"><use href="#i-wrench"/></svg></span><span><strong>Sprzęty i dokumenty</strong><span class="muted small">Gwarancje, przeglądy, instrukcje</span></span><span class="tab-badge" id="eq-badge-hub" hidden></span><svg class="ico chev"><use href="#i-chevron"/></svg></button>
             <button type="button" class="hub-tile" data-goto="expenses"><span class="ht-ico alt"><svg class="ico"><use href="#i-chart"/></svg></span><span><strong>Wydatki i marnowanie</strong><span class="muted small">Wykresy, paragony, domownicy</span></span><svg class="ico chev"><use href="#i-chevron"/></svg></button>
           </div>
@@ -453,6 +500,54 @@
     <datalist id="units">
       <option value="szt."><option value="kg"><option value="g"><option value="l"><option value="ml"><option value="opak."><option value="rolka">
     </datalist>
+  </dialog>
+
+  <!-- Wpis w kalendarzu -->
+  <dialog id="event-dialog" class="wide-dialog">
+    <form id="event-form">
+      <div class="dialog-head full">
+        <span class="ev-ico lg" id="event-ico" aria-hidden="true"><svg class="ico"><use href="#i-calendar"/></svg></span>
+        <div><h2 id="event-dialog-title">Nowy wpis</h2><p class="muted small" id="event-owner"></p></div>
+      </div>
+      <input type="hidden" name="id">
+      <label class="full">Co?<input name="title" required maxlength="200" placeholder="np. Dentysta Zosi, Wywóz śmieci, Urodziny babci"></label>
+      <label>Dzień<input name="starts_on" type="date" required></label>
+      <label>Do dnia<input name="ends_on" type="date" title="Ostatni dzień – dla wpisów na kilka dni"></label>
+      <label class="check full"><input type="checkbox" name="all_day" checked> Cały dzień</label>
+      <label data-time>Od godziny<input name="start_time" type="time"></label>
+      <label data-time>Do godziny<input name="end_time" type="time"></label>
+      <label>Powtarzaj
+        <select name="repeat">
+          <option value="none">Nie powtarzaj</option>
+          <option value="daily">Codziennie</option>
+          <option value="weekly">Co tydzień</option>
+          <option value="biweekly">Co 2 tygodnie</option>
+          <option value="monthly">Co miesiąc</option>
+          <option value="yearly">Co rok</option>
+        </select>
+      </label>
+      <label data-until>Powtarzaj do<input name="repeat_until" type="date" title="Puste = bez końca"></label>
+      <div class="full stack-label">Rodzaj
+        <div class="loc-chips wrap" id="event-cats"></div>
+      </div>
+      <div class="full stack-label">Kogo dotyczy <span class="muted small">(nic nie zaznaczone = cała rodzina)</span>
+        <div class="loc-chips wrap" id="event-users"></div>
+      </div>
+      <div class="full stack-label">Kto widzi
+        <div class="seg-ctl" role="radiogroup" id="event-vis">
+          <button type="button" data-vis="shared" aria-pressed="true"><svg class="ico"><use href="#i-users"/></svg><span>Cała rodzina</span></button>
+          <button type="button" data-vis="private" aria-pressed="false"><svg class="ico"><use href="#i-lock"/></svg><span>Tylko ja</span></button>
+        </div>
+      </div>
+      <label class="full">Notatki<textarea name="notes" rows="2" placeholder="np. adres, co zabrać, kto odbiera"></textarea></label>
+      <p class="muted small full" id="event-repeat-note" hidden>To wpis powtarzany – zmiany dotyczą wszystkich powtórzeń.</p>
+      <p class="form-error full" id="event-error" hidden></p>
+      <div class="dialog-actions full">
+        <button type="button" class="btn danger spacer" id="event-delete" hidden>Usuń</button>
+        <button type="button" class="btn" data-close>Anuluj</button>
+        <button type="submit" class="btn primary">Zapisz</button>
+      </div>
+    </form>
   </dialog>
 
   <!-- Lek -->

@@ -280,6 +280,14 @@ function buildRoutes({ store, lookupProduct, images, files, limiter, cfg }) {
     ['PATCH', /^\/api\/batches\/(\d+)$/, (ctx) => store.updateBatch(ctx.m[1], ctx.body, uid(ctx))],
     ['DELETE', /^\/api\/batches\/(\d+)$/, (ctx) => store.removeBatch(ctx.m[1], { reason: ctx.query.get('reason') ?? 'wasted', ...uid(ctx) })],
 
+    // ----- Kalendarz -----
+    ['GET', /^\/api\/events$/, ({ query, user }) => store.listEvents(Object.fromEntries(query), { userId: user.id })],
+    ['POST', /^\/api\/events$/, async ({ body, user }) => ({ status: 201, body: await store.createEvent(body, { userId: user.id }) })],
+    ['GET', /^\/api\/events\/(\d+)$/, ({ m, user }) => store.getEvent(m[1], { userId: user.id })],
+    ['PUT', /^\/api\/events\/(\d+)$/, ({ m, body, user }) => store.updateEvent(m[1], body, { userId: user.id })],
+    ['PATCH', /^\/api\/events\/(\d+)$/, ({ m, body, user }) => store.updateEvent(m[1], body, { userId: user.id })],
+    ['DELETE', /^\/api\/events\/(\d+)$/, ({ m, user }) => store.deleteEvent(m[1], { userId: user.id })],
+
     // ----- Domowa apteka -----
     ['GET', /^\/api\/medicines$/, ({ query }) => store.listMedicines(Object.fromEntries(query))],
     ['POST', /^\/api\/medicines$/, async ({ body, user }) => ({ status: 201, body: await store.createMedicine(body, { userId: user.id }) })],

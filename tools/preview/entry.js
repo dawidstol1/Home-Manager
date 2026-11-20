@@ -10,6 +10,7 @@ const { Store } = require('../../src/db.js');
 const { createApp } = require('../../src/app.js');
 const auth = require('../../src/auth.js');
 const { seedMedicines } = require('./demo/medicines.js');
+const { seedCalendar } = require('./demo/calendar.js');
 
 const DEMO = window.__DEMO__;
 let token = null;
@@ -174,6 +175,7 @@ async function seed() {
   }
 
   await seedMedicines(store, { addDays, users: [dawid, kasia] });
+  await seedCalendar(store, { addDays, users: [dawid, kasia] });
 
   // Zalogowany jako Dawid.
   token = auth.newToken();
