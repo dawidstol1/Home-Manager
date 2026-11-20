@@ -10,6 +10,7 @@ const { createImageService } = require('./images');
 const { createFileStore, MAX_UPLOAD } = require('./files');
 const auth = require('./auth');
 const { toBarcode, ValidationError } = require('./db');
+const { isApiToken } = require('./integrations');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const MIME = {
@@ -74,7 +75,7 @@ async function readJson(req) {
   }
 }
 
-function serveStatic(req, res, pathname) {
+function serveStatic(req, res, pathname, frameAncestors = []) {
   const rel = pathname === '/' ? 'index.html' : decodeURIComponent(pathname).replace(/^\/+/, '');
   const file = path.resolve(PUBLIC_DIR, rel);
   if (!file.startsWith(PUBLIC_DIR + path.sep)) return send(res, 403, 'Forbidden');
@@ -84,6 +85,8 @@ function serveStatic(req, res, pathname) {
     // Kod interfejsu zawsze sprawdzany na serwerze – inaczej aktualizacje nie dotrą do klientów.
     // Fonty i ikony się nie zmieniają, mogą leżeć w pamięci przeglądarki dłużej.
     headers['Cache-Control'] = ['.woff2', '.png', '.svg'].includes(path.extname(file)) ? 'public, max-age=604800' : 'no-cache';
+    // Osadzanie w ramce (panel Home Assistant, strona w Domoticzu) tylko z adresów dodanych w Ustawieniach.
+    if (path.extname(file) === '.html') headers['Content-Security-Policy'] = `frame-ancestors 'self'${frameAncestors.map((o) => ` ${o}`).join('')}`;
     send(res, 200, data, headers);
   });
 }
@@ -99,7 +102,7 @@ function contentDisposition(name, inline) {
  * Opcje: public (bez logowania), admin (tylko administrator), raw (treść jako Buffer).
  * Handler zwraca obiekt (200), { status, body, headers } lub undefined (204).
  */
-function buildRoutes({ store, lookupProduct, images, files, limiter, cfg }) {
+function buildRoutes({ store, lookupProduct, images, files, limiter, cfg, embed }) {
   const withImage = async (pending) => {
     const item = await pending;
     if (item.barcode && !item.image) images.attachLater(item.id);
@@ -172,12 +175,13 @@ function buildRoutes({ store, lookupProduct, images, files, limiter, cfg }) {
         await store.deleteUserSessions(user.id, { exceptHash: auth.tokenHash(token) });
         return { ok: true };
       },
+      { noApiToken: true },
     ],
     ['GET', /^\/api\/users$/, () => store.listUsers()],
     [
       'POST', /^\/api\/users$/,
       async ({ body }) => ({ status: 201, body: await store.createUser(body, await auth.hashPassword(body.password)) }),
-      { admin: true },
+      { admin: true, noApiToken: true },
     ],
     [
       'PATCH', /^\/api\/users\/(\d+)$/,
@@ -187,7 +191,7 @@ function buildRoutes({ store, lookupProduct, images, files, limiter, cfg }) {
         if (hash) await store.deleteUserSessions(user.id);
         return user;
       },
-      { admin: true },
+      { admin: true, noApiToken: true },
     ],
     [
       'DELETE', /^\/api\/users\/(\d+)$/,
@@ -195,7 +199,7 @@ function buildRoutes({ store, lookupProduct, images, files, limiter, cfg }) {
         if (Number(m[1]) === user.id) throw new ValidationError('Nie możesz usunąć własnego konta');
         return store.deleteUser(m[1]);
       },
-      { admin: true },
+      { admin: true, noApiToken: true },
     ],
 
     // ----- Zdjęcia produktów -----
@@ -255,7 +259,7 @@ function buildRoutes({ store, lookupProduct, images, files, limiter, cfg }) {
     ['GET', /^\/api\/reports$/, ({ query }) => store.reports({ months: query.get('months') })],
     ['GET', /^\/api\/shopping-list$/, () => store.shoppingList()],
     ['GET', /^\/api\/export$/, () => store.exportAll()],
-    ['POST', /^\/api\/import$/, ({ body }) => store.importAll(body), { admin: true }],
+    ['POST', /^\/api\/import$/, ({ body }) => store.importAll(body), { admin: true, noApiToken: true }],
 
     // ----- Słowniki -----
     ['GET', /^\/api\/(categories|locations)$/, ({ m }) => store.listDict(m[1])],
@@ -279,6 +283,22 @@ function buildRoutes({ store, lookupProduct, images, files, limiter, cfg }) {
     ['GET', /^\/api\/items\/(\d+)\/history$/, ({ m }) => store.getHistory(m[1])],
     ['PATCH', /^\/api\/batches\/(\d+)$/, (ctx) => store.updateBatch(ctx.m[1], ctx.body, uid(ctx))],
     ['DELETE', /^\/api\/batches\/(\d+)$/, (ctx) => store.removeBatch(ctx.m[1], { reason: ctx.query.get('reason') ?? 'wasted', ...uid(ctx) })],
+
+    // ----- Integracje (Home Assistant, Domoticz) -----
+    ['GET', /^\/api\/integration\/summary$/, ({ user }) => store.integrationSummary({ userId: user.id })],
+    ['GET', /^\/api\/tokens$/, ({ user }) => store.listApiTokens(user.id), { noApiToken: true }],
+    ['POST', /^\/api\/tokens$/, async ({ body, user }) => ({ status: 201, body: await store.createApiToken(user.id, body.name) }), { noApiToken: true }],
+    ['DELETE', /^\/api\/tokens\/(\d+)$/, ({ m, user }) => store.deleteApiToken(user.id, m[1]), { noApiToken: true }],
+    ['GET', /^\/api\/settings\/embed$/, async () => ({ origins: await store.getEmbedOrigins() })],
+    [
+      'PUT', /^\/api\/settings\/embed$/,
+      async ({ body }) => {
+        const origins = await store.setEmbedOrigins(body.origins);
+        embed.origins = origins;
+        return { origins };
+      },
+      { admin: true, noApiToken: true },
+    ],
 
     // ----- Kalendarz -----
     ['GET', /^\/api\/events$/, ({ query, user }) => store.listEvents(Object.fromEntries(query), { userId: user.id })],
@@ -379,7 +399,9 @@ function createApp(store, { productLookup, images, imagesDir, imageFetch, upload
     });
   const files = createFileStore(uploadsDir ?? path.join(__dirname, '..', 'data', 'uploads'));
   const cfg = { trustProxy, secure: secureCookies };
-  const routes = buildRoutes({ store, lookupProduct: lookup, images: imageService, files, limiter: auth.createLoginLimiter(), cfg });
+  const embed = { origins: [] };
+  const embedReady = store.getEmbedOrigins().then((o) => { embed.origins = o; }).catch(() => {});
+  const routes = buildRoutes({ store, lookupProduct: lookup, images: imageService, files, limiter: auth.createLoginLimiter(), cfg, embed });
 
   return async function handler(req, res) {
     const url = new URL(req.url, 'http://localhost');
@@ -399,7 +421,8 @@ function createApp(store, { productLookup, images, imagesDir, imageFetch, upload
 
     if (!pathname.startsWith('/api/')) {
       if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method not allowed');
-      return serveStatic(req, res, pathname);
+      await embedReady;
+      return serveStatic(req, res, pathname, embed.origins);
     }
 
     const matching = routes.filter(([, re]) => re.test(pathname));
@@ -423,8 +446,15 @@ function createApp(store, { productLookup, images, imagesDir, imageFetch, upload
           if (!allowed.includes(host)) throw httpError(403, 'Żądanie z innej strony zostało zablokowane');
         }
       }
-      const user = cred ? await store.getSessionUser(auth.tokenHash(cred.token), { days: auth.SESSION_DAYS }) : null;
+      let user = null;
+      if (cred) {
+        user = isApiToken(cred.token)
+          ? await store.getApiTokenUser(cred.token)
+          : await store.getSessionUser(auth.tokenHash(cred.token), { days: auth.SESSION_DAYS });
+      }
       if (!opts.public && !user) throw httpError(401, 'Zaloguj się');
+      // Klucz API (wtyczka) nie może zarządzać kontami ani kluczami.
+      if (opts.noApiToken && user?.via_api_token) throw httpError(403, 'Klucz API nie ma do tego uprawnień');
       if (opts.admin && user.role !== 'admin') throw httpError(403, 'Tylko administrator może to zrobić');
 
       let body = {};

@@ -14,3 +14,7 @@ data/images/
 
 # Dokumenty sprzętów (paragony, gwarancje, instrukcje)
 data/uploads/
+
+# Python (testy wtyczki Home Assistant / Domoticz)
+__pycache__/
+.pytest_cache/

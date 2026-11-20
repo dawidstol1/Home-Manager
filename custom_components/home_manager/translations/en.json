@@ -1,0 +1,165 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Home resources",
+        "description": "Connect Home Assistant to the Home-Manager server. Create a key in the app: Settings → Integrations → Create key.",
+        "data": {
+          "url": "Server URL",
+          "token": "API key",
+          "verify_ssl": "Verify HTTPS certificate"
+        },
+        "data_description": {
+          "url": "Address where Home Assistant reaches the app, e.g. http://192.168.1.30",
+          "token": "Starts with hm_",
+          "verify_ssl": "Turn off only for self-signed certificates"
+        }
+      },
+      "reauth_confirm": {
+        "title": "New API key",
+        "description": "The key for {url} stopped working. Create a new one in the app: Settings → Integrations.",
+        "data": {
+          "token": "API key"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect.",
+      "invalid_auth": "Invalid API key.",
+      "invalid_url": "Invalid URL.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This server is already configured.",
+      "reauth_successful": "New key saved."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Integration options",
+        "data": {
+          "show_panel": "Show the app in the sidebar",
+          "panel_url": "App URL for the sidebar (optional)",
+          "scan_minutes": "Sensor refresh (minutes)"
+        },
+        "data_description": {
+          "panel_url": "When the app should open under a different address than the server URL. Add the Home Assistant address in the app: Settings → Integrations."
+        }
+      }
+    },
+    "error": {
+      "invalid_url": "Invalid URL"
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "attention": {
+        "name": "Needs attention"
+      }
+    },
+    "calendar": {
+      "household": {
+        "name": "Household calendar"
+      }
+    },
+    "todo": {
+      "shopping_list": {
+        "name": "Shopping list"
+      }
+    },
+    "sensor": {
+      "shopping": {
+        "name": "To buy"
+      },
+      "expired": {
+        "name": "Expired products"
+      },
+      "expiring": {
+        "name": "Expiring within 7 days"
+      },
+      "total_items": {
+        "name": "Items at home"
+      },
+      "medicines": {
+        "name": "Medicines"
+      },
+      "med_expired": {
+        "name": "Expired medicines"
+      },
+      "med_expiring": {
+        "name": "Medicines expiring soon"
+      },
+      "med_low": {
+        "name": "Medicines running low"
+      },
+      "equipment": {
+        "name": "Warranties and service"
+      },
+      "spent_month": {
+        "name": "Spent this month"
+      },
+      "wasted_month": {
+        "name": "Wasted this month"
+      },
+      "events_today": {
+        "name": "Calendar entries today"
+      }
+    }
+  },
+  "services": {
+    "consume_barcode": {
+      "name": "Consume by barcode",
+      "description": "Takes 1 unit of the product with this barcode (soonest expiry first).",
+      "fields": {
+        "barcode": {
+          "name": "Barcode",
+          "description": "EAN code."
+        },
+        "reason": {
+          "name": "Reason",
+          "description": "Used or wasted."
+        },
+        "config_entry_id": {
+          "name": "Server",
+          "description": "When several servers are configured."
+        }
+      }
+    },
+    "take_medicine": {
+      "name": "Give medicine",
+      "description": "Logs a dose in the medicine journal and takes it from the open pack.",
+      "fields": {
+        "medicine": {
+          "name": "Medicine",
+          "description": "Medicine name."
+        },
+        "amount": {
+          "name": "Amount",
+          "description": "In the medicine's unit."
+        },
+        "person": {
+          "name": "Person",
+          "description": "Who got it."
+        },
+        "note": {
+          "name": "Note",
+          "description": "E.g. temperature."
+        },
+        "config_entry_id": {
+          "name": "Server",
+          "description": "When several servers are configured."
+        }
+      }
+    }
+  },
+  "selector": {
+    "reason": {
+      "options": {
+        "used": "Used",
+        "wasted": "Wasted"
+      }
+    }
+  },
+  "exceptions": {}
+}

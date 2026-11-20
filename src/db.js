@@ -12,6 +12,7 @@
 const { Pool, types } = require('pg');
 const pharmacy = require('./pharmacy');
 const calendar = require('./calendar');
+const integrations = require('./integrations');
 
 const DEFAULT_URL = 'postgres://homemanager:homemanager@localhost:5432/homemanager';
 const REPORT_TZ = process.env.REPORT_TZ || 'Europe/Warsaw';
@@ -328,6 +329,7 @@ class Store {
       await client.query(SCHEMA);
       await client.query(pharmacy.SCHEMA);
       await client.query(calendar.SCHEMA);
+      await client.query(integrations.SCHEMA);
       if (seed) await this.seedDefaults(client);
     } finally {
       await client.query('SELECT pg_advisory_unlock(727001)').catch(() => {});
@@ -1384,6 +1386,7 @@ function similarity(a, b) {
 const helpers = { ValidationError, NotFoundError, toNumber, toDate, toId, toText, toBarcode, today, addDays };
 pharmacy.install(Store, helpers);
 calendar.install(Store, helpers);
+integrations.install(Store, helpers);
 
 module.exports = {
   Store, ValidationError, NotFoundError, today, addDays, toBarcode, nameKey, DEFAULT_URL, REASONS, DOC_KINDS,

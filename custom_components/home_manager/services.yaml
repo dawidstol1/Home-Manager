@@ -1,0 +1,45 @@
+consume_barcode:
+  fields:
+    barcode:
+      required: true
+      example: "5900512300108"
+      selector:
+        text:
+    reason:
+      default: used
+      selector:
+        select:
+          translation_key: reason
+          options:
+            - used
+            - wasted
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: home_manager
+take_medicine:
+  fields:
+    medicine:
+      required: true
+      example: "Paracetamol"
+      selector:
+        text:
+    amount:
+      default: 1
+      selector:
+        number:
+          min: 0.01
+          max: 1000
+          step: 0.01
+          mode: box
+    person:
+      example: "Zosia"
+      selector:
+        text:
+    note:
+      selector:
+        text:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: home_manager

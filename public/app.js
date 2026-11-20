@@ -3,6 +3,16 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
+// Aplikacja otwarta w ramce (panel Home Assistant, strona w Domoticzu): ciasteczka z innej strony bywają
+// blokowane (Safari, aplikacje mobilne), więc sesję trzymamy w pamięci tej ramki i wysyłamy jako nagłówek.
+const EMBEDDED = (() => { try { return window.self !== window.top; } catch { return true; } })();
+const tokenStore = {
+  get() { try { return EMBEDDED ? localStorage.getItem('hm-token') : null; } catch { return null; } },
+  set(t) { try { if (EMBEDDED && t) localStorage.setItem('hm-token', t); } catch { /* brak pamięci */ } },
+  clear() { try { localStorage.removeItem('hm-token'); } catch { /* brak pamięci */ } },
+};
+const authHeaders = () => { const t = tokenStore.get(); return t ? { Authorization: `Bearer ${t}` } : {}; };
+
 const VIEWS = ['dashboard', 'calendar', 'items', 'pharmacy', 'shopping', 'equipment', 'expenses', 'settings'];
 const VIEW_TITLES = {
   dashboard: 'Pulpit', calendar: 'Kalendarz', items: 'Zasoby', pharmacy: 'Domowa apteka', shopping: 'Lista zakupów',
@@ -16,12 +26,13 @@ const state = { categories: [], locations: [], users: [], currentView: 'dashboar
 async function api(path, { method = 'GET', body, raw, headers = {} } = {}) {
   const res = await fetch(`/api${path}`, {
     method,
-    headers: raw ? headers : body ? { 'Content-Type': 'application/json', ...headers } : headers,
+    headers: { ...authHeaders(), ...(raw ? headers : body ? { 'Content-Type': 'application/json', ...headers } : headers) },
     body: raw ?? (body ? JSON.stringify(body) : undefined),
   });
   if (res.status === 204) return null;
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && !path.startsWith('/auth/')) {
+    tokenStore.clear();
     showAuth(false);
     throw new Error('Zaloguj się ponownie');
   }
@@ -277,6 +288,102 @@ async function loadDashboard() {
           <span class="count">${c.count}</span>
         </div>`).join('')
     : '<p class="muted">Dodaj pierwszy zasób w zakładce „Zasoby”.</p>';
+}
+
+// ---------- Integracje ----------
+
+async function loadIntegrations() {
+  const [tokens, embed] = await Promise.all([api('/tokens'), api('/settings/embed')]);
+  $('#token-list').innerHTML = tokens.length
+    ? tokens.map((t) => `<li data-token="${t.id}">
+        <span class="li-main">${icon('key')}<span>${esc(t.name)} <span class="muted small">· …${esc(t.hint)}</span>
+          <span class="li-sub">utworzony ${fmtTime(t.created_at)} · ${t.last_used_at ? `ostatnio użyty ${fmtTime(t.last_used_at)}` : 'jeszcze nieużyty'}</span></span></span>
+        <button type="button" class="btn sm danger" data-token-del>Usuń</button>
+      </li>`).join('')
+    : emptyLi('Brak kluczy. Utwórz klucz i wklej go w ustawieniach wtyczki.');
+  const area = $('#embed-form').elements.origins;
+  if (document.activeElement !== area) area.value = embed.origins.join('\n');
+  area.readOnly = !isAdmin();
+  $('#embed-note').textContent = isAdmin() ? '' : 'Adresy zmienia administrator.';
+}
+
+async function createToken(e) {
+  e.preventDefault();
+  const form = e.target;
+  try {
+    const t = await api('/tokens', { method: 'POST', body: { name: form.elements.name.value } });
+    form.reset();
+    $('#token-new').hidden = false;
+    $('#token-value').value = t.token;
+    $('#token-value').select();
+    loadIntegrations();
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+async function onTokenClick(e) {
+  const del = e.target.closest('[data-token-del]');
+  if (!del) return;
+  const li = del.closest('[data-token]');
+  if (!(await ask('Wtyczki, które go używają, przestaną działać.', { title: 'Usunąć klucz?', ok: 'Usuń', danger: true }))) return;
+  try {
+    await api(`/tokens/${li.dataset.token}`, { method: 'DELETE' });
+    toast('Usunięto klucz');
+    loadIntegrations();
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+async function saveEmbed(e) {
+  e.preventDefault();
+  const origins = e.target.elements.origins.value.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
+  try {
+    const res = await api('/settings/embed', { method: 'PUT', body: { origins } });
+    e.target.elements.origins.value = res.origins.join('\n');
+    toast('Zapisano adresy');
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+/** W ramce obrazki i pliki dokumentów pobieramy z nagłówkiem sesji (bez ciasteczka by nie przeszły). */
+function setupEmbeddedFiles() {
+  if (!EMBEDDED) return;
+  document.body.classList.add('embedded');
+  const blobs = new Map();
+  const blobFor = async (url) => {
+    if (!blobs.has(url)) {
+      blobs.set(url, fetch(url, { headers: authHeaders() }).then((r) => (r.ok ? r.blob() : Promise.reject(new Error(`Błąd ${r.status}`)))).then((b) => URL.createObjectURL(b)));
+    }
+    return blobs.get(url);
+  };
+  const fix = (img) => {
+    const src = img.getAttribute('src');
+    if (!src || !src.startsWith('/api/documents/')) return;
+    img.removeAttribute('src');
+    blobFor(src).then((u) => { img.src = u; }).catch(() => {});
+  };
+  new MutationObserver((list) => {
+    for (const m of list) {
+      for (const n of m.addedNodes) {
+        if (n.nodeType !== 1) continue;
+        if (n.tagName === 'IMG') fix(n);
+        n.querySelectorAll?.('img[src^="/api/documents/"]').forEach(fix);
+      }
+    }
+  }).observe(document.body, { childList: true, subtree: true });
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('a[href^="/api/documents/"]');
+    if (!a) return;
+    e.preventDefault();
+    const win = window.open('', '_blank');
+    blobFor(a.getAttribute('href')).then((u) => {
+      if (win) win.location = u;
+      else location.href = u;
+    }).catch((err) => { win?.close(); toast(err.message); });
+  });
 }
 
 // ---------- Kalendarz ----------
@@ -1350,7 +1457,7 @@ async function copyShopping() {
 // ---------- Ustawienia ----------
 
 async function loadSettings() {
-  await Promise.all([loadDicts(), loadUsers()]);
+  await Promise.all([loadDicts(), loadUsers(), loadIntegrations()]);
   const render = (kind, items) => {
     $(`#dict-${kind}`).innerHTML = items.length
       ? items.map((d) => `
@@ -1898,6 +2005,7 @@ async function submitAuth(e) {
       method: 'POST', body: { name: data.name, login: data.login, password: data.password },
     });
     form.reset();
+    tokenStore.set(res.token);
     setUser(res.user);
     await startApp();
   } catch (ex) {
@@ -1908,6 +2016,7 @@ async function submitAuth(e) {
 
 async function logout() {
   await api('/auth/logout', { method: 'POST' }).catch(() => {});
+  tokenStore.clear();
   // Usuń dane zapamiętane do pracy offline – następna osoba na tym urządzeniu ich nie zobaczy.
   if ('caches' in window) {
     const keys = await caches.keys();
@@ -2087,6 +2196,24 @@ function bindEvents() {
   on('#doc-camera', 'change', (e) => { $('#doc-kind').value = $('#doc-kind').value || 'photo'; uploadDocs(e); });
   on('#eq-doc-list', 'click', onDocClick);
   on('#eq-warranty-years', 'change', setWarrantyYears);
+
+  // Integracje
+  on('#token-form', 'submit', createToken);
+  on('#token-list', 'click', onTokenClick);
+  on('#embed-form', 'submit', saveEmbed);
+  on('#token-copy', 'click', async () => {
+    const v = $('#token-value').value;
+    try {
+      await navigator.clipboard.writeText(v);
+      toast('Skopiowano klucz');
+    } catch {
+      $('#token-value').select();
+      toast('Zaznaczono – skopiuj ręcznie');
+    }
+  });
+  setupEmbeddedFiles();
+  // Podpowiedzi przy ikonach menu (gdy menu jest zwinięte do samych ikon).
+  $$('.tab').forEach((t) => { t.title = (t.querySelector('.lbl-desktop') || t.querySelector('span:not(.tab-badge)'))?.textContent || ''; });
 
   // Kalendarz
   on('#cal-prev', 'click', () => moveMonth(-1));

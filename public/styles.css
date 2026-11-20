@@ -928,6 +928,30 @@ a.btn { text-decoration: none; }
   #view-calendar .loc-chips { flex: 1 1 100%; }
 }
 
+/* ===== Integracje ===== */
+.grid2.inner { margin: 6px 0 0; gap: 22px; }
+.grid2.inner > div { min-width: 0; }
+.token-new { padding: 12px; border-radius: 14px; background: var(--ok-soft); margin-bottom: 10px; }
+.token-new p { margin: 0 0 8px; }
+.token-new input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; }
+#embed-form textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88rem; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85em; background: var(--surface-2); padding: 1px 5px; border-radius: 6px; overflow-wrap: anywhere; }
+/* Wewnątrz Home Assistant / Domoticza: bez własnego paska na górze strony (ma go aplikacja-gospodarz). */
+body.embedded .page-header { padding-top: 12px; }
+@media (min-width: 901px) {
+  body.embedded .app { grid-template-columns: 76px minmax(0, 1fr); }
+  body.embedded .sidebar { padding-left: 10px; padding-right: 10px; align-items: center; }
+  body.embedded .brand { padding: 0; }
+  body.embedded .brand-text, body.embedded .nav-label, body.embedded .tab > span:not(.tab-badge),
+  body.embedded .user-card .uc-text, body.embedded .user-card > .ico { display: none; }
+  body.embedded .tabs { align-items: center; gap: 6px; }
+  body.embedded .tab { justify-content: center; width: 48px; height: 48px; padding: 0; }
+  body.embedded .tab .tab-badge { position: absolute; top: 2px; right: 0; margin: 0; min-width: 18px; height: 18px; font-size: .64rem; }
+  body.embedded .user-card { width: auto; padding: 6px; justify-content: center; }
+  body.embedded .page-header { padding-left: 24px; padding-right: 24px; }
+  body.embedded main { padding-left: 24px; padding-right: 24px; }
+}
+
 /* ===== Więcej: kafle nawigacji (telefon) ===== */
 .hub { display: grid; gap: 10px; margin-bottom: 18px; }
 .hub-tile {
