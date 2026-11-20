@@ -82,3 +82,31 @@ class HomeManagerClient:
 
     async def take_medicine(self, medicine_id: int, amount: float, person: str = "", note: str = "") -> dict:
         return await self.request("POST", f"/medicines/{medicine_id}/take", json={"amount": amount, "person": person, "note": note})
+
+    # ----- Zasoby i apteka (pełne listy dla encji i Asystenta) -----
+    async def items(self, query: str | None = None, status: str | None = None) -> list[dict]:
+        params = {k: v for k, v in (("q", query), ("status", status)) if v}
+        return await self.request("GET", "/items", params=params or None)
+
+    async def adjust_item(self, item_id: int, delta: float, reason: str | None = None) -> dict:
+        body: dict = {"delta": delta}
+        if reason:
+            body["reason"] = reason
+        if delta > 0:
+            body["note"] = "Home Assistant"
+        return await self.request("POST", f"/items/{item_id}/adjust", json=body)
+
+    async def create_item(self, data: dict) -> dict:
+        return await self.request("POST", "/items", json=data)
+
+    async def dictionary(self, kind: str) -> list[dict]:
+        return await self.request("GET", f"/{kind}")
+
+    async def add_medicine_pack(self, medicine_id: int, quantity: float, expires_at: str | None = None) -> dict:
+        return await self.request("POST", f"/medicines/{medicine_id}/packs", json={"quantity": quantity, "expires_at": expires_at})
+
+    async def users(self) -> list[dict]:
+        return await self.request("GET", "/users")
+
+    async def shopping(self) -> list[dict]:
+        return await self.request("GET", "/shopping-list")

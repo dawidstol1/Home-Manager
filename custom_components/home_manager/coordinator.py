@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import timedelta
 import logging
@@ -45,7 +46,10 @@ class HomeManagerCoordinator(DataUpdateCoordinator[dict]):
 
     async def _async_update_data(self) -> dict:
         try:
-            return await self.client.summary()
+            summary, items, medicines = await asyncio.gather(
+                self.client.summary(), self.client.items(), self.client.medicines()
+            )
+            return {**summary, "all_items": items, "all_medicines": medicines}
         except InvalidAuth as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except (CannotConnect, HomeManagerError) as err:

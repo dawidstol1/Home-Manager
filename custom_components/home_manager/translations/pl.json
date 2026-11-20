@@ -41,7 +41,9 @@
         "data": {
           "show_panel": "Pokaż aplikację w menu bocznym",
           "panel_url": "Adres aplikacji w menu (opcjonalnie)",
-          "scan_minutes": "Odświeżanie czujników (minuty)"
+          "scan_minutes": "Odświeżanie czujników (minuty)",
+          "item_entities": "Czujnik i przycisk dla każdego produktu",
+          "voice": "Polskie komendy dla Asystenta (np. „ile mamy mleka”)"
         },
         "data_description": {
           "panel_url": "Gdy telefon ma otwierać aplikację pod innym adresem niż Home Assistant (np. https://zasoby.example.pl z internetu). Puste = adres serwera. Dodaj adres Home Assistant w aplikacji: Ustawienia → Integracje → Gdzie wolno pokazać aplikację."
@@ -151,6 +153,128 @@
           "description": "Gdy dodano kilka serwerów."
         }
       }
+    },
+    "adjust_item": {
+      "name": "Zmień ilość produktu",
+      "description": "Zużycie, wyrzucenie albo dodanie ilości produktu (nazwa może być w innej formie, np. „mleka”).",
+      "fields": {
+        "item": {
+          "name": "Produkt",
+          "description": "Nazwa albo numer produktu."
+        },
+        "amount": {
+          "name": "Ilość",
+          "description": "Ile sztuk / jednostek."
+        },
+        "mode": {
+          "name": "Co zrobić",
+          "description": "Zużyte, wyrzucone (zmarnowane) albo dodaj (zakup)."
+        },
+        "config_entry_id": {
+          "name": "Serwer",
+          "description": "Gdy dodano kilka serwerów."
+        }
+      }
+    },
+    "find_items": {
+      "name": "Znajdź produkty",
+      "description": "Zwraca produkty z ilością, miejscem i terminem – np. do odpowiedzi w automatyzacji.",
+      "fields": {
+        "query": {
+          "name": "Szukaj",
+          "description": "Nazwa produktu."
+        },
+        "status": {
+          "name": "Status",
+          "description": "Tylko niski stan, kończąca się ważność albo po terminie."
+        },
+        "config_entry_id": {
+          "name": "Serwer",
+          "description": "Gdy dodano kilka serwerów."
+        }
+      }
+    },
+    "find_medicines": {
+      "name": "Znajdź leki",
+      "description": "Lek po nazwie albo leki „na co” (np. gorączka) z ilością, dawkowaniem i ostatnim podaniem.",
+      "fields": {
+        "query": {
+          "name": "Lek albo objaw",
+          "description": "Np. „paracetamol” albo „gorączka”."
+        },
+        "config_entry_id": {
+          "name": "Serwer",
+          "description": "Gdy dodano kilka serwerów."
+        }
+      }
+    },
+    "add_item": {
+      "name": "Dodaj produkt",
+      "description": "Nowy produkt w zasobach.",
+      "fields": {
+        "name": {
+          "name": "Nazwa",
+          "description": "Nazwa produktu."
+        },
+        "quantity": {
+          "name": "Ilość",
+          "description": "Ile jest."
+        },
+        "unit": {
+          "name": "Jednostka",
+          "description": "szt., kg, l…"
+        },
+        "min_quantity": {
+          "name": "Stan minimalny",
+          "description": "Poniżej – trafi na listę zakupów."
+        },
+        "category": {
+          "name": "Kategoria",
+          "description": "Nazwa kategorii z aplikacji."
+        },
+        "location": {
+          "name": "Lokalizacja",
+          "description": "Nazwa miejsca z aplikacji."
+        },
+        "expires_at": {
+          "name": "Data ważności",
+          "description": "Termin."
+        },
+        "barcode": {
+          "name": "Kod kreskowy",
+          "description": "EAN."
+        },
+        "notes": {
+          "name": "Notatki",
+          "description": "Dowolny opis."
+        },
+        "config_entry_id": {
+          "name": "Serwer",
+          "description": "Gdy dodano kilka serwerów."
+        }
+      }
+    },
+    "add_medicine_pack": {
+      "name": "Dodaj opakowanie leku",
+      "description": "Nowe opakowanie leku z własnym terminem.",
+      "fields": {
+        "medicine": {
+          "name": "Lek",
+          "description": "Nazwa leku z apteczki."
+        },
+        "quantity": {
+          "name": "Ilość",
+          "description": "Ile w opakowaniu (tabl., ml…)."
+        },
+        "expires_at": {
+          "name": "Ważne do",
+          "description": "Termin z opakowania."
+        },
+        "config_entry_id": {
+          "name": "Serwer",
+          "description": "Gdy dodano kilka serwerów."
+        }
+      }
     }
   },
   "selector": {
@@ -158,6 +282,20 @@
       "options": {
         "used": "Zużyte",
         "wasted": "Wyrzucone"
+      }
+    },
+    "mode": {
+      "options": {
+        "used": "Zużyte",
+        "wasted": "Wyrzucone",
+        "add": "Dodaj (zakup)"
+      }
+    },
+    "status": {
+      "options": {
+        "low": "Niski stan",
+        "expiring": "Kończy się ważność",
+        "expired": "Po terminie"
       }
     }
   },

@@ -41,7 +41,9 @@
         "data": {
           "show_panel": "Show the app in the sidebar",
           "panel_url": "App URL for the sidebar (optional)",
-          "scan_minutes": "Sensor refresh (minutes)"
+          "scan_minutes": "Sensor refresh (minutes)",
+          "item_entities": "Sensor and button for every item",
+          "voice": "Polish Assist sentences"
         },
         "data_description": {
           "panel_url": "When the app should open under a different address than the server URL. Add the Home Assistant address in the app: Settings → Integrations."
@@ -151,6 +153,128 @@
           "description": "When several servers are configured."
         }
       }
+    },
+    "adjust_item": {
+      "name": "Change item quantity",
+      "description": "Use, waste or add quantity of a product.",
+      "fields": {
+        "item": {
+          "name": "Item",
+          "description": "Name or id."
+        },
+        "amount": {
+          "name": "Amount",
+          "description": "How many."
+        },
+        "mode": {
+          "name": "Action",
+          "description": "Used, wasted or add."
+        },
+        "config_entry_id": {
+          "name": "Server",
+          "description": "When several servers are configured."
+        }
+      }
+    },
+    "find_items": {
+      "name": "Find items",
+      "description": "Returns items with quantity, location and expiry.",
+      "fields": {
+        "query": {
+          "name": "Search",
+          "description": "Item name."
+        },
+        "status": {
+          "name": "Status",
+          "description": "Low, expiring or expired only."
+        },
+        "config_entry_id": {
+          "name": "Server",
+          "description": "When several servers are configured."
+        }
+      }
+    },
+    "find_medicines": {
+      "name": "Find medicines",
+      "description": "Medicine by name or by purpose (e.g. fever).",
+      "fields": {
+        "query": {
+          "name": "Medicine or symptom",
+          "description": "E.g. paracetamol or fever."
+        },
+        "config_entry_id": {
+          "name": "Server",
+          "description": "When several servers are configured."
+        }
+      }
+    },
+    "add_item": {
+      "name": "Add item",
+      "description": "New item in the inventory.",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "Item name."
+        },
+        "quantity": {
+          "name": "Quantity",
+          "description": "How many."
+        },
+        "unit": {
+          "name": "Unit",
+          "description": "pcs, kg, l…"
+        },
+        "min_quantity": {
+          "name": "Minimum",
+          "description": "Below it goes to the shopping list."
+        },
+        "category": {
+          "name": "Category",
+          "description": "Category name."
+        },
+        "location": {
+          "name": "Location",
+          "description": "Location name."
+        },
+        "expires_at": {
+          "name": "Expiry date",
+          "description": "Best before."
+        },
+        "barcode": {
+          "name": "Barcode",
+          "description": "EAN."
+        },
+        "notes": {
+          "name": "Notes",
+          "description": "Free text."
+        },
+        "config_entry_id": {
+          "name": "Server",
+          "description": "When several servers are configured."
+        }
+      }
+    },
+    "add_medicine_pack": {
+      "name": "Add medicine pack",
+      "description": "New pack with its own expiry date.",
+      "fields": {
+        "medicine": {
+          "name": "Medicine",
+          "description": "Medicine name."
+        },
+        "quantity": {
+          "name": "Quantity",
+          "description": "Amount in the pack."
+        },
+        "expires_at": {
+          "name": "Expires",
+          "description": "Date on the pack."
+        },
+        "config_entry_id": {
+          "name": "Server",
+          "description": "When several servers are configured."
+        }
+      }
     }
   },
   "selector": {
@@ -158,6 +282,20 @@
       "options": {
         "used": "Used",
         "wasted": "Wasted"
+      }
+    },
+    "mode": {
+      "options": {
+        "used": "Used",
+        "wasted": "Wasted",
+        "add": "Add (purchase)"
+      }
+    },
+    "status": {
+      "options": {
+        "low": "Low stock",
+        "expiring": "Expiring",
+        "expired": "Expired"
       }
     }
   },

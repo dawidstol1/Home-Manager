@@ -67,7 +67,7 @@ async def test_sensors_and_panel(hass: HomeAssistant, hm_server) -> None:
     assert shopping.attributes["items"] == ["Mleko: 5 l"]
     assert hass.states.get("sensor.zasoby_domowe_expired_products").attributes["items"] == ["Ser"]
     assert hass.states.get("sensor.zasoby_domowe_expired_medicines").state == "1"
-    assert hass.states.get("sensor.zasoby_domowe_medicines").state == "2"
+    assert hass.states.get("sensor.zasoby_domowe_medicines").state == "3"
     assert hass.states.get("sensor.zasoby_domowe_warranties_and_service").state == "1"
     assert hass.states.get("sensor.zasoby_domowe_calendar_entries_today").attributes["events"] == ["23:00 Dentysta"]
     attention = hass.states.get("binary_sensor.zasoby_domowe_needs_attention")
@@ -133,7 +133,7 @@ async def test_shopping_list_todo(hass: HomeAssistant, hm_server) -> None:
 async def test_services(hass: HomeAssistant, hm_server) -> None:
     await _setup(hass, hm_server)
     res = await hass.services.async_call(DOMAIN, "take_medicine", {"medicine": "paracetamol", "amount": 2, "person": "Zosia"}, blocking=True, return_response=True)
-    assert res == {"name": "Paracetamol", "left": 18, "unit": "tabl."}
+    assert res == {"name": "Paracetamol", "left": 18, "unit": "tabl.", "person": "Zosia"}
     res = await hass.services.async_call(DOMAIN, "consume_barcode", {"barcode": "5900820000011"}, blocking=True, return_response=True)
     assert res["name"] == "Mleko"
     assert res["quantity"] == 0

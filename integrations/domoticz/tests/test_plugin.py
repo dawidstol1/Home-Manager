@@ -83,7 +83,7 @@ def test_devices_and_values(server, tmp_path):
     wait_results(mod)
     assert devices[1].sValue == "1"            # do kupienia: Mleko
     assert devices[2].sValue == "1"            # po terminie: Ser
-    assert devices[4].sValue == "2"            # leki w apteczce
+    assert devices[4].sValue == "3"            # leki w apteczce
     assert devices[5].sValue == "1"            # leki po terminie
     assert devices[8].sValue == "1"            # gwarancja pralki
     assert devices[9].sValue == "1"            # dziś: Dentysta

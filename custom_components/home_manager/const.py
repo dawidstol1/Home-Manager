@@ -14,3 +14,5 @@ DEFAULT_SCAN_INTERVAL = timedelta(minutes=DEFAULT_SCAN_MINUTES)
 PANEL_ICON = "mdi:home-heart"
 PANEL_TITLE = "Zasoby domowe"
 MANUFACTURER = "Home-Manager"
+CONF_ITEM_ENTITIES = "item_entities"
+CONF_VOICE = "voice"
