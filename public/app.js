@@ -3,9 +3,9 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
-const VIEWS = ['dashboard', 'items', 'pharmacy', 'shopping', 'equipment', 'expenses', 'settings'];
+const VIEWS = ['dashboard', 'calendar', 'items', 'pharmacy', 'shopping', 'equipment', 'expenses', 'settings'];
 const VIEW_TITLES = {
-  dashboard: 'Pulpit', items: 'Zasoby', pharmacy: 'Domowa apteka', shopping: 'Lista zakupów',
+  dashboard: 'Pulpit', calendar: 'Kalendarz', items: 'Zasoby', pharmacy: 'Domowa apteka', shopping: 'Lista zakupów',
   equipment: 'Sprzęty i dokumenty', expenses: 'Wydatki', settings: 'Ustawienia',
 };
 const state = { categories: [], locations: [], users: [], currentView: 'dashboard', user: null, months: 6 };
@@ -123,7 +123,7 @@ function applyLayout() {
 function showView(name) {
   state.currentView = name;
   const narrow = matchMedia('(max-width: 900px)').matches;
-  const navView = narrow && ['equipment', 'expenses'].includes(name) ? 'settings' : name;
+  const navView = narrow && ['equipment', 'expenses', 'shopping'].includes(name) ? 'settings' : name;
   $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === navView));
   $('#page-title').textContent = narrow && name === 'settings' ? 'Więcej' : VIEW_TITLES[name];
   const date = new Date().toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -138,7 +138,7 @@ function showView(name) {
 function refresh() {
   if (!state.user) return Promise.resolve();
   const views = {
-    dashboard: loadDashboard, items: loadItems, pharmacy: loadPharmacy, shopping: loadShopping,
+    dashboard: loadDashboard, calendar: loadCalendar, items: loadItems, pharmacy: loadPharmacy, shopping: loadShopping,
     equipment: loadEquipment, expenses: loadExpenses, settings: loadSettings,
   };
   updateShopBadge();
@@ -182,6 +182,9 @@ async function updateShopBadge() {
       b.hidden = !n;
     };
     set('#shop-badge', stats.low_stock);
+    set('#shop-badge-hub', stats.low_stock);
+    const t = todayStr();
+    set('#cal-badge', (await api(`/events?from=${t}&to=${t}`)).length);
     set('#eq-badge', stats.warranty_ending + stats.service_due);
     set('#eq-badge-hub', stats.warranty_ending + stats.service_due);
     set('#med-badge', stats.med_expired + stats.med_expiring);
@@ -239,6 +242,11 @@ async function loadDashboard() {
     { label: 'Zmarnowane w tym mies.', value: fmtMoney(stats.wasted_month), cls: stats.wasted_month ? 'warn' : '', ico: 'trash', view: 'expenses' },
   ].map(tile).join('');
 
+  const t0 = todayStr();
+  const upcoming = await api(`/events?from=${t0}&to=${isoAdd(t0, 6)}&home=1`);
+  $('#dash-cal').innerHTML = renderAgenda(spreadDays(upcoming, t0, isoAdd(t0, 6)), { from: t0, to: isoAdd(t0, 6), skipEmpty: true, limit: 8 })
+    || '<p class="agenda-empty">Nic zaplanowanego na najbliższy tydzień. Dodaj wpis w kalendarzu – zobaczy go cała rodzina.</p>';
+
   const alerts = equipmentAlerts(equipment);
   $('#dash-eq-card').hidden = !alerts.length;
   $('#dash-eq').innerHTML = alerts.map((a) => `<li data-eq-id="${a.id}" class="clickable"><span>${esc(a.name)}</span>${a.badge}</li>`).join('');
@@ -269,6 +277,278 @@ async function loadDashboard() {
           <span class="count">${c.count}</span>
         </div>`).join('')
     : '<p class="muted">Dodaj pierwszy zasób w zakładce „Zasoby”.</p>';
+}
+
+// ---------- Kalendarz ----------
+
+const CAT = {
+  family: 'Rodzina', home: 'Dom', health: 'Zdrowie', school: 'Szkoła',
+  work: 'Praca', birthday: 'Urodziny', trip: 'Wyjazd', other: 'Inne',
+};
+const REPEAT_LABEL = { daily: 'codziennie', weekly: 'co tydzień', biweekly: 'co 2 tygodnie', monthly: 'co miesiąc', yearly: 'co rok' };
+const MONTHS_FULL = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
+const cal = { year: 0, month: 0, selected: '', mode: 'month', who: 'all', events: [], editing: null };
+
+const isoAdd = (d, n) => { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+const isoDow = (d) => (new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7; // 0 = poniedziałek
+const initials = (name = '') => name.trim().split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+const USER_GRADS = [
+  'linear-gradient(135deg,#6a5cff,#b35cff)', 'linear-gradient(135deg,#ec4899,#f97316)', 'linear-gradient(135deg,#10b981,#0ea5e9)',
+  'linear-gradient(135deg,#f59e0b,#ef4444)', 'linear-gradient(135deg,#0ea5e9,#6366f1)', 'linear-gradient(135deg,#14b8a6,#84cc16)',
+];
+function userAvatar(id) {
+  const idx = state.users.findIndex((u) => u.id === id);
+  const u = state.users[idx];
+  if (!u) return '';
+  return `<span class="avatar" style="background:${USER_GRADS[idx % USER_GRADS.length]}" title="${esc(u.name)}">${esc(initials(u.name))}</span>`;
+}
+
+function dayLabel(d, { weekday = true } = {}) {
+  const t = todayStr();
+  const base = new Date(`${d}T00:00:00`).toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', ...(weekday ? { weekday: 'long' } : {}) });
+  if (d === t) return `Dziś · ${base}`;
+  if (d === isoAdd(t, 1)) return `Jutro · ${base}`;
+  return base.charAt(0).toUpperCase() + base.slice(1);
+}
+
+/** Wpisy rozłożone na dni (wpis wielodniowy pojawia się w każdym swoim dniu). */
+function spreadDays(events, from, to) {
+  const byDay = new Map();
+  for (const e of events) {
+    const last = e.end_date && e.end_date < to ? e.end_date : (e.end_date || e.date);
+    for (let d = e.date < from ? from : e.date; d <= last && d <= to; d = isoAdd(d, 1)) {
+      if (!byDay.has(d)) byDay.set(d, []);
+      byDay.get(d).push(e);
+    }
+  }
+  return byDay;
+}
+
+function evTime(e, day) {
+  if (e.end_date) {
+    if (day === e.date) return e.start_time ? `${e.start_time}<small>start</small>` : '<span>od</span><small>dziś</small>';
+    if (day === e.end_date) return '<span>do</span><small>dziś</small>';
+    return '<span>·</span><small>cały dzień</small>';
+  }
+  if (!e.start_time) return '<span>—</span><small>cały dzień</small>';
+  return `${e.start_time}${e.end_time ? `<small>do ${e.end_time}</small>` : ''}`;
+}
+
+function evRow(e, day) {
+  const who = e.for_users?.length ? e.for_users.map(userAvatar).join('') : '';
+  const meta = [
+    e.readonly ? `<span>${icon(e.source === 'medicine' ? 'pill' : 'wrench')}z domu</span>` : `<span>${esc(CAT[e.category] ?? 'Inne')}</span>`,
+    e.repeat && e.repeat !== 'none' ? `<span>${icon('repeat')}${REPEAT_LABEL[e.repeat]}</span>` : '',
+    e.visibility === 'private' ? `<span>${icon('lock')}tylko Ty</span>` : '',
+    !e.readonly && e.visibility !== 'private' && !e.for_users?.length ? `<span>${icon('users')}cała rodzina</span>` : '',
+    e.notes ? `<span>${esc(e.notes.length > 40 ? `${e.notes.slice(0, 40)}…` : e.notes)}</span>` : '',
+  ].filter(Boolean).join('');
+  return `<button type="button" class="ev ev-${esc(e.category)}${e.readonly ? ' home' : ''}" data-ev="${e.id ?? ''}" data-src="${e.readonly ? esc(e.source) : ''}" data-ref="${e.ref_id ?? ''}">
+    <span class="ev-time">${evTime(e, day)}</span>
+    <span class="ev-body"><span class="ev-title">${esc(e.title)}</span><span class="ev-meta">${meta}</span></span>
+    <span class="ev-who">${who}</span>
+  </button>`;
+}
+
+function renderAgenda(byDay, { from, to, skipEmpty = false, limit = Infinity }) {
+  let html = '';
+  let count = 0;
+  for (let d = from; d <= to && count < limit; d = isoAdd(d, 1)) {
+    const list = byDay.get(d) ?? [];
+    if (!list.length && skipEmpty) continue;
+    html += `<div class="agenda-day"><div class="agenda-date${d === todayStr() ? ' today' : ''}">${dayLabel(d)}</div>
+      ${list.length ? list.map((e) => evRow(e, d)).join('') : '<p class="agenda-empty">Nic zaplanowanego.</p>'}</div>`;
+    count += list.length || 1;
+  }
+  return html;
+}
+
+async function loadCalendar() {
+  if (!cal.year) {
+    const t = todayStr();
+    cal.year = Number(t.slice(0, 4));
+    cal.month = Number(t.slice(5, 7)) - 1;
+    cal.selected = t;
+  }
+  const first = `${cal.year}-${String(cal.month + 1).padStart(2, '0')}-01`;
+  const days = new Date(Date.UTC(cal.year, cal.month + 1, 0)).getUTCDate();
+  const last = `${first.slice(0, 8)}${String(days).padStart(2, '0')}`;
+  const gridFrom = isoAdd(first, -isoDow(first));
+  const gridTo = isoAdd(last, 6 - isoDow(last));
+  const listFrom = cal.mode === 'list' ? (todayStr() > first && todayStr() <= last ? todayStr() : first) : gridFrom;
+  const listTo = cal.mode === 'list' ? isoAdd(listFrom, 59) : gridTo;
+
+  const params = new URLSearchParams({ from: listFrom, to: listTo });
+  if ($('#cal-home').checked) params.set('home', '1');
+  if (cal.who === 'mine') params.set('mine', '1');
+  else if (cal.who !== 'all') params.set('user', cal.who);
+  cal.events = await api(`/events?${params}`);
+
+  $('#cal-title').textContent = cal.mode === 'list'
+    ? `${dayLabel(listFrom, { weekday: false }).replace(/^(Dziś|Jutro) · /, '')} – ${new Date(`${listTo}T00:00:00`).toLocaleDateString('pl-PL', { day: 'numeric', month: 'long' })}`
+    : `${MONTHS_FULL[cal.month]} ${cal.year}`;
+  $$('[data-cal-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.calMode === cal.mode)));
+  $('#cal-month').hidden = cal.mode !== 'month';
+  $('#cal-list').hidden = cal.mode !== 'list';
+
+  const chip = (value, label, extra = '') => `<button type="button" class="chip-btn person" data-cal-who="${value}" aria-pressed="${cal.who === String(value)}">${extra}${esc(label)}</button>`;
+  $('#cal-filters').innerHTML = chip('all', 'Wszystko') + chip('mine', 'Moje wpisy')
+    + state.users.map((u) => chip(u.id, u.name, userAvatar(u.id).replace('class="avatar"', 'class="avatar"'))).join('');
+
+  const byDay = spreadDays(cal.events, listFrom, listTo);
+  if (cal.mode === 'list') {
+    $('#cal-agenda').innerHTML = renderAgenda(byDay, { from: listFrom, to: listTo, skipEmpty: true })
+      || '<p class="agenda-empty">Brak wpisów w najbliższych 60 dniach.</p>';
+    return;
+  }
+  const t = todayStr();
+  let cells = '';
+  for (let d = gridFrom; d <= gridTo; d = isoAdd(d, 1)) {
+    const list = byDay.get(d) ?? [];
+    const cls = [d.slice(0, 7) !== first.slice(0, 7) ? 'out' : '', d === t ? 'today' : '', d === cal.selected ? 'selected' : '', isoDow(d) >= 5 ? 'weekend' : ''].join(' ');
+    const pills = list.slice(0, 3).map((e) => `<span class="cal-pill ev-${esc(e.category)}${e.readonly ? ' home' : ''}">${e.start_time && !e.end_date ? `<span class="t">${e.start_time}</span>` : ''}${esc(e.title)}</span>`).join('');
+    const more = list.length > 3 ? `<span class="cal-more">+${list.length - 3} więcej</span>` : '';
+    const dots = list.slice(0, 4).map((e) => `<span class="cal-dot ev-${esc(e.category)}"></span>`).join('');
+    cells += `<button type="button" class="cal-cell ${cls}" data-day="${d}" aria-label="${dayLabel(d)}${list.length ? `, ${list.length} ${plural(list.length, 'wpis', 'wpisy', 'wpisów')}` : ''}">
+      <span class="cal-num">${Number(d.slice(8))}</span>${pills}${more}<span class="cal-dots">${dots}</span></button>`;
+  }
+  $('#cal-grid').innerHTML = cells;
+  renderCalDay(byDay);
+}
+
+function renderCalDay(byDay = spreadDays(cal.events, cal.selected, cal.selected)) {
+  const d = cal.selected;
+  const label = dayLabel(d);
+  const [prefix, rest] = label.includes(' · ') ? label.split(' · ') : ['', label];
+  $('#cal-day-week').textContent = prefix || new Date(`${d}T00:00:00`).toLocaleDateString('pl-PL', { weekday: 'long' }).replace(/^./, (c) => c.toUpperCase());
+  $('#cal-day-title').textContent = prefix ? rest : new Date(`${d}T00:00:00`).toLocaleDateString('pl-PL', { day: 'numeric', month: 'long' });
+  const list = byDay.get(d) ?? [];
+  $('#cal-day-list').innerHTML = list.length
+    ? list.map((e) => evRow(e, d)).join('')
+    : '<p class="agenda-empty">Wolny dzień. Dotknij „+”, żeby coś zaplanować.</p>';
+}
+
+function moveMonth(delta) {
+  cal.month += delta;
+  if (cal.month < 0) { cal.month = 11; cal.year -= 1; }
+  if (cal.month > 11) { cal.month = 0; cal.year += 1; }
+  const first = `${cal.year}-${String(cal.month + 1).padStart(2, '0')}-01`;
+  if (cal.selected.slice(0, 7) !== first.slice(0, 7)) cal.selected = first;
+  loadCalendar().catch((e) => toast(e.message));
+}
+
+function openEvent(ev = null, date = null) {
+  const form = $('#event-form');
+  form.reset();
+  $('#event-error').hidden = true;
+  cal.editing = ev;
+  const v = ev ?? { starts_on: date || cal.selected || todayStr(), category: 'family', visibility: 'shared', repeat: 'none', for_users: [] };
+  form.elements.id.value = ev?.id ?? '';
+  form.elements.title.value = v.title ?? '';
+  form.elements.starts_on.value = v.starts_on;
+  form.elements.ends_on.value = v.ends_on ?? '';
+  form.elements.all_day.checked = !v.start_time;
+  form.elements.start_time.value = v.start_time ?? '';
+  form.elements.end_time.value = v.end_time ?? '';
+  form.elements.repeat.value = v.repeat;
+  form.elements.repeat_until.value = v.repeat_until ?? '';
+  form.elements.notes.value = v.notes ?? '';
+  form.dataset.category = v.category;
+  form.dataset.visibility = v.visibility;
+  form.dataset.users = JSON.stringify(v.for_users ?? []);
+  $('#event-dialog-title').textContent = ev ? 'Edytuj wpis' : 'Nowy wpis';
+  $('#event-owner').textContent = ev?.owner_name ? `Dodał(a): ${ev.owner_name}` : 'Wspólny kalendarz domu';
+  $('#event-delete').hidden = !ev;
+  $('#event-repeat-note').hidden = !ev || ev.repeat === 'none';
+  // Prywatność wpisu może zmienić tylko jego autor.
+  const canVis = !ev || ev.owner_id === state.user.id;
+  $$('#event-vis button').forEach((b) => { b.disabled = !canVis; });
+  syncEventForm();
+  $('#event-dialog').showModal();
+  if (!ev) form.elements.title.focus();
+}
+
+function syncEventForm() {
+  const form = $('#event-form');
+  const allDay = form.elements.all_day.checked;
+  $$('#event-form [data-time]').forEach((el) => { el.hidden = allDay; });
+  $('#event-form [data-until]').hidden = form.elements.repeat.value === 'none';
+  const cat = form.dataset.category;
+  $('#event-ico').className = `ev-ico lg ev-${cat}`;
+  $('#event-ico').innerHTML = icon(cat === 'health' ? 'cross' : cat === 'home' ? 'home' : cat === 'birthday' ? 'sparkle' : cat === 'trip' ? 'pin' : cat === 'school' ? 'book' : 'calendar');
+  $('#event-cats').innerHTML = Object.entries(CAT).map(([k, l]) => `<button type="button" class="chip-btn cat ev-${k}" data-cat="${k}" aria-pressed="${k === cat}">${l}</button>`).join('');
+  const users = JSON.parse(form.dataset.users || '[]');
+  $('#event-users').innerHTML = state.users.map((u) => `<button type="button" class="chip-btn person" data-user-pick="${u.id}" aria-pressed="${users.includes(u.id)}">${userAvatar(u.id)}${esc(u.name)}</button>`).join('');
+  $$('#event-vis [data-vis]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.vis === form.dataset.visibility)));
+}
+
+async function saveEvent(e) {
+  e.preventDefault();
+  const form = e.target;
+  const f = form.elements;
+  const allDay = f.all_day.checked;
+  const body = {
+    title: f.title.value,
+    starts_on: f.starts_on.value,
+    ends_on: f.ends_on.value || null,
+    start_time: allDay ? null : f.start_time.value || null,
+    end_time: allDay ? null : f.end_time.value || null,
+    repeat: f.repeat.value,
+    repeat_until: f.repeat.value === 'none' ? null : f.repeat_until.value || null,
+    notes: f.notes.value,
+    category: form.dataset.category,
+    for_users: JSON.parse(form.dataset.users || '[]'),
+  };
+  if (!cal.editing || cal.editing.owner_id === state.user.id) body.visibility = form.dataset.visibility;
+  const id = f.id.value;
+  try {
+    const saved = await api(id ? `/events/${id}` : '/events', { method: id ? 'PUT' : 'POST', body });
+    $('#event-dialog').close();
+    toast(id ? 'Zapisano zmiany' : `Dodano do kalendarza: ${saved.title}`);
+    cal.selected = saved.starts_on;
+    if (state.currentView === 'calendar') {
+      cal.year = Number(saved.starts_on.slice(0, 4));
+      cal.month = Number(saved.starts_on.slice(5, 7)) - 1;
+    }
+    refresh();
+  } catch (err) {
+    $('#event-error').textContent = err.message;
+    $('#event-error').hidden = false;
+  }
+}
+
+async function deleteEvent() {
+  const ev = cal.editing;
+  if (!ev) return;
+  const extra = ev.repeat !== 'none' ? ' Znikną wszystkie powtórzenia.' : '';
+  if (!(await ask(`Wpis zniknie z kalendarza.${extra}`, { title: `Usunąć „${ev.title}”?`, ok: 'Usuń', danger: true }))) return;
+  try {
+    await api(`/events/${ev.id}`, { method: 'DELETE' });
+    $('#event-dialog').close();
+    toast('Usunięto wpis');
+    refresh();
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+/** Kliknięcie wpisu na liście: własny wpis → edycja, termin z domu → odpowiedni widok. */
+async function onEventClick(e) {
+  const row = e.target.closest('.ev');
+  if (!row) return;
+  if (row.dataset.src === 'medicine') {
+    showView('pharmacy');
+    return api(`/medicines/${row.dataset.ref}`).then(openMedicine).catch((err) => toast(err.message));
+  }
+  if (row.dataset.src === 'equipment') {
+    showView('equipment');
+    return openEquipment(row.dataset.ref).catch((err) => toast(err.message));
+  }
+  try {
+    openEvent(await api(`/events/${row.dataset.ev}`));
+  } catch (err) {
+    toast(err.message);
+  }
 }
 
 // ---------- Domowa apteka ----------
@@ -1807,6 +2087,63 @@ function bindEvents() {
   on('#doc-camera', 'change', (e) => { $('#doc-kind').value = $('#doc-kind').value || 'photo'; uploadDocs(e); });
   on('#eq-doc-list', 'click', onDocClick);
   on('#eq-warranty-years', 'change', setWarrantyYears);
+
+  // Kalendarz
+  on('#cal-prev', 'click', () => moveMonth(-1));
+  on('#cal-next', 'click', () => moveMonth(1));
+  on('#cal-today', 'click', () => {
+    const t = todayStr();
+    cal.year = Number(t.slice(0, 4));
+    cal.month = Number(t.slice(5, 7)) - 1;
+    cal.selected = t;
+    loadCalendar().catch((e) => toast(e.message));
+  });
+  $$('[data-cal-mode]').forEach((b) => b.addEventListener('click', () => {
+    cal.mode = b.dataset.calMode;
+    loadCalendar().catch((e) => toast(e.message));
+  }));
+  on('#cal-home', 'change', () => loadCalendar().catch((e) => toast(e.message)));
+  on('#cal-filters', 'click', (e) => {
+    const b = e.target.closest('[data-cal-who]');
+    if (!b) return;
+    cal.who = b.dataset.calWho;
+    loadCalendar().catch((err) => toast(err.message));
+  });
+  on('#cal-grid', 'click', (e) => {
+    const cell = e.target.closest('[data-day]');
+    if (!cell) return;
+    if (cal.selected === cell.dataset.day && matchMedia('(min-width: 641px)').matches) return openEvent(null, cell.dataset.day);
+    cal.selected = cell.dataset.day;
+    $$('#cal-grid .cal-cell').forEach((c) => c.classList.toggle('selected', c === cell));
+    renderCalDay();
+    if (matchMedia('(max-width: 1100px)').matches) $('.cal-day').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+  on('#cal-day-add', 'click', () => openEvent(null, cal.selected));
+  on('#btn-event-add', 'click', () => openEvent(null, cal.selected || todayStr()));
+  ['#cal-day-list', '#cal-agenda', '#dash-cal'].forEach((sel) => on(sel, 'click', onEventClick));
+  on('#event-form', 'submit', saveEvent);
+  on('#event-form', 'change', (e) => {
+    if (['all_day', 'repeat'].includes(e.target.name)) syncEventForm();
+    if (e.target.name === 'starts_on') {
+      const f = e.target.form.elements;
+      if (f.ends_on.value && f.ends_on.value < f.starts_on.value) f.ends_on.value = '';
+    }
+  });
+  on('#event-form', 'click', (e) => {
+    const form = $('#event-form');
+    const cat = e.target.closest('[data-cat]');
+    const pick = e.target.closest('[data-user-pick]');
+    const vis = e.target.closest('[data-vis]');
+    if (cat) form.dataset.category = cat.dataset.cat;
+    else if (pick) {
+      const id = Number(pick.dataset.userPick);
+      const users = JSON.parse(form.dataset.users || '[]');
+      form.dataset.users = JSON.stringify(users.includes(id) ? users.filter((x) => x !== id) : [...users, id]);
+    } else if (vis && !vis.disabled) form.dataset.visibility = vis.dataset.vis;
+    else return;
+    syncEventForm();
+  });
+  on('#event-delete', 'click', deleteEvent);
 
   // Apteka
   on('#btn-med-add', 'click', () => openMedicine());

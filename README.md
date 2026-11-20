@@ -26,6 +26,9 @@ ile zostało, kiedy traci ważność i co trzeba dokupić.
 - **Domowa apteka** – leki z substancją, dawką, postacią, „na co” i „dla kogo”; kilka opakowań z własnymi terminami;
   termin po otwarciu (np. syrop 6 miesięcy), przycisk „Podaj” z dziennikiem podań (kto, ile, kiedy – z ostrzeżeniem o świeżej
   dawce), wyszukiwanie po objawie („gorączka”), lista leków po terminie do oddania w aptece
+- **Wspólny kalendarz** – wpisy dla całej rodziny albo prywatne („tylko ja”), przypisanie do domowników,
+  godziny lub cały dzień, wpisy na kilka dni, powtarzanie (codziennie, co tydzień, co 2 tygodnie, co miesiąc, co rok);
+  widok miesiąca i listy, filtr „moje / domownika”, terminy z domu (gwarancje, przeglądy, ważność leków), najbliższe dni na pulpicie
 - **Nowoczesny wygląd** – menu boczne na komputerze, pływający pasek na telefonie, okna jako arkusze od dołu,
   jasny i ciemny motyw (automatycznie albo do wyboru), fonty dołączone do aplikacji (działa bez internetu)
 
@@ -89,7 +92,7 @@ Zmienne środowiskowe:
 **Baza danych:** `items` (produkty), `batches` (partie z datami ważności – stan produktu to ich suma),
 `history` (każda zmiana stanu: powód zakup/zużycie/wyrzucenie/korekta, kwota, kto), `receipts` i `receipt_aliases`
 (paragony i zapamiętane dopasowania nazw), `equipment` i `documents` (sprzęty i ich pliki), `medicines`,
-`medicine_packs` i `medicine_log` (apteczka: leki, opakowania, dziennik podań), `users` i `sessions`
+`medicine_packs` i `medicine_log` (apteczka: leki, opakowania, dziennik podań), `events` (kalendarz), `users` i `sessions`
 (konta, w bazie tylko skróty haseł i tokenów), `categories`, `locations`, `barcode_cache`. Schemat aktualizuje się
 sam przy starcie – także ze starszej wersji, bez utraty danych. Zmiany ilości są wykonywane w transakcji z blokadą
 wiersza, więc kilka osób może jednocześnie zużywać i dokupować ten sam produkt bez gubienia zmian.
@@ -206,6 +209,7 @@ src/
   receipt.js  – odczyt pozycji z tekstu paragonu
   files.js    – przechowywanie dokumentów sprzętów
   pharmacy.js – domowa apteka: leki, opakowania, podania, terminy po otwarciu
+  calendar.js – kalendarz domowy: wpisy wspólne i prywatne, powtarzanie
   cli.js      – narzędzia administracyjne (reset hasła, lista kont)
   products.js – podpowiedzi produktów po kodzie (Open Food Facts + cache)
   images.js   – pobieranie i przechowywanie zdjęć produktów
@@ -257,6 +261,8 @@ tools/preview/ – podgląd w przeglądarce: serwer + PostgreSQL (PGlite) w jedn
 | POST | `/api/equipment/:id/documents?kind=warranty&name=plik.pdf` | Wysłanie pliku (treść żądania = plik) |
 | GET | `/api/documents/:id/file` | Pobranie dokumentu |
 | PATCH / DELETE | `/api/documents/:id` | Zmiana nazwy/rodzaju / usunięcie |
+| GET / POST | `/api/events` (`?from=2026-12-01&to=2026-12-31&home=1&mine=1&user=2`) | Wpisy w zakresie dat (z rozwiniętymi powtórzeniami) / nowy wpis |
+| GET / PUT / PATCH / DELETE | `/api/events/:id` | Wpis (prywatne widzi i zmienia tylko autor) |
 | GET / POST | `/api/medicines` (`?q=gorączka&status=expired\|expiring\|low&person=Zosia`) | Leki w apteczce / nowy lek (opcjonalnie z `quantity` i `expires_at` pierwszego opakowania) |
 | GET / PUT / PATCH / DELETE | `/api/medicines/:id` | Lek z opakowaniami i historią |
 | POST | `/api/medicines/:id/packs` | Nowe opakowanie `{ "quantity": 20, "expires_at": "2027-05-01" }` |
