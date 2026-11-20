@@ -24,6 +24,8 @@ const OUT = process.argv[3] || path.join(D, 'out');
   app = app.replace(/if \('serviceWorker' in navigator[\s\S]*$/, '');
   // Motyw „jak w systemie” zostawia data-theme ustawiony przez stronę, w której osadzony jest podgląd.
   app = app.replace('else delete document.documentElement.dataset.theme;', '');
+  // Podgląd zawsze działa w ramce strony z artefaktem – to nie jest osadzenie w Home Assistant.
+  app = app.replace(/const EMBEDDED = \(\(\) => \{[^\n]*\n/, 'const EMBEDDED = false;\n');
   const scanner = read(R + 'public/scanner.js').replace("'vendor/zxing.min.js'", "'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js'");
 
   const old = JSON.parse(read(path.join(D, 'demo', 'data.json')));

@@ -1,0 +1,165 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Zasoby domowe",
+        "description": "Połącz Home Assistant z serwerem aplikacji Zasoby domowe. Klucz utworzysz w aplikacji: Ustawienia → Integracje → Utwórz klucz.",
+        "data": {
+          "url": "Adres serwera",
+          "token": "Klucz API",
+          "verify_ssl": "Sprawdzaj certyfikat HTTPS"
+        },
+        "data_description": {
+          "url": "Adres, pod którym Home Assistant widzi aplikację, np. http://192.168.1.30 albo https://zasoby.example.pl",
+          "token": "Zaczyna się od hm_",
+          "verify_ssl": "Wyłącz tylko przy certyfikacie z własnego serwera (self-signed)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Nowy klucz API",
+        "description": "Klucz dla {url} przestał działać (np. został usunięty). Utwórz nowy w aplikacji: Ustawienia → Integracje.",
+        "data": {
+          "token": "Klucz API"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Nie udało się połączyć z serwerem. Sprawdź adres i czy aplikacja działa.",
+      "invalid_auth": "Nieprawidłowy klucz API.",
+      "invalid_url": "Nieprawidłowy adres – podaj np. http://192.168.1.30",
+      "unknown": "Nieoczekiwany błąd."
+    },
+    "abort": {
+      "already_configured": "Ten serwer jest już dodany.",
+      "reauth_successful": "Zapisano nowy klucz."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Ustawienia integracji",
+        "data": {
+          "show_panel": "Pokaż aplikację w menu bocznym",
+          "panel_url": "Adres aplikacji w menu (opcjonalnie)",
+          "scan_minutes": "Odświeżanie czujników (minuty)"
+        },
+        "data_description": {
+          "panel_url": "Gdy telefon ma otwierać aplikację pod innym adresem niż Home Assistant (np. https://zasoby.example.pl z internetu). Puste = adres serwera. Dodaj adres Home Assistant w aplikacji: Ustawienia → Integracje → Gdzie wolno pokazać aplikację."
+        }
+      }
+    },
+    "error": {
+      "invalid_url": "Nieprawidłowy adres"
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "attention": {
+        "name": "Wymaga uwagi"
+      }
+    },
+    "calendar": {
+      "household": {
+        "name": "Kalendarz domowy"
+      }
+    },
+    "todo": {
+      "shopping_list": {
+        "name": "Lista zakupów"
+      }
+    },
+    "sensor": {
+      "shopping": {
+        "name": "Do kupienia"
+      },
+      "expired": {
+        "name": "Produkty po terminie"
+      },
+      "expiring": {
+        "name": "Kończy się ważność (7 dni)"
+      },
+      "total_items": {
+        "name": "Zasoby w domu"
+      },
+      "medicines": {
+        "name": "Leki w apteczce"
+      },
+      "med_expired": {
+        "name": "Leki po terminie"
+      },
+      "med_expiring": {
+        "name": "Leki – kończy się termin"
+      },
+      "med_low": {
+        "name": "Leki – mało"
+      },
+      "equipment": {
+        "name": "Gwarancje i przeglądy"
+      },
+      "spent_month": {
+        "name": "Wydatki w tym miesiącu"
+      },
+      "wasted_month": {
+        "name": "Zmarnowane w tym miesiącu"
+      },
+      "events_today": {
+        "name": "Wpisy w kalendarzu dziś"
+      }
+    }
+  },
+  "services": {
+    "consume_barcode": {
+      "name": "Zużyj produkt po kodzie",
+      "description": "Zdejmuje 1 szt. produktu o tym kodzie kreskowym (z partii o najkrótszym terminie).",
+      "fields": {
+        "barcode": {
+          "name": "Kod kreskowy",
+          "description": "Kod EAN produktu."
+        },
+        "reason": {
+          "name": "Powód",
+          "description": "Zużyte albo wyrzucone (zmarnowane)."
+        },
+        "config_entry_id": {
+          "name": "Serwer",
+          "description": "Gdy dodano kilka serwerów."
+        }
+      }
+    },
+    "take_medicine": {
+      "name": "Podaj lek",
+      "description": "Zapisuje podanie leku w dzienniku apteczki i zdejmuje ilość z otwartego opakowania.",
+      "fields": {
+        "medicine": {
+          "name": "Lek",
+          "description": "Nazwa leku z apteczki."
+        },
+        "amount": {
+          "name": "Ilość",
+          "description": "W jednostkach leku (tabl., ml…)."
+        },
+        "person": {
+          "name": "Komu",
+          "description": "Imię osoby."
+        },
+        "note": {
+          "name": "Notatka",
+          "description": "Np. temperatura."
+        },
+        "config_entry_id": {
+          "name": "Serwer",
+          "description": "Gdy dodano kilka serwerów."
+        }
+      }
+    }
+  },
+  "selector": {
+    "reason": {
+      "options": {
+        "used": "Zużyte",
+        "wasted": "Wyrzucone"
+      }
+    }
+  },
+  "exceptions": {}
+}

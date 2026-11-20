@@ -29,6 +29,8 @@ ile zostało, kiedy traci ważność i co trzeba dokupić.
 - **Wspólny kalendarz** – wpisy dla całej rodziny albo prywatne („tylko ja”), przypisanie do domowników,
   godziny lub cały dzień, wpisy na kilka dni, powtarzanie (codziennie, co tydzień, co 2 tygodnie, co miesiąc, co rok);
   widok miesiąca i listy, filtr „moje / domownika”, terminy z domu (gwarancje, przeglądy, ważność leków), najbliższe dni na pulpicie
+- **Home Assistant i Domoticz** – wtyczki z czujnikami (zakupy, terminy, leki, wydatki), kalendarzem, listą zakupów
+  i całą aplikacją w menu HA/Domoticza; instrukcja: **[integrations/README.md](integrations/README.md)**
 - **Nowoczesny wygląd** – menu boczne na komputerze, pływający pasek na telefonie, okna jako arkusze od dołu,
   jasny i ciemny motyw (automatycznie albo do wyboru), fonty dołączone do aplikacji (działa bez internetu)
 
@@ -210,6 +212,7 @@ src/
   files.js    – przechowywanie dokumentów sprzętów
   pharmacy.js – domowa apteka: leki, opakowania, podania, terminy po otwarciu
   calendar.js – kalendarz domowy: wpisy wspólne i prywatne, powtarzanie
+  integrations.js – klucze API, osadzanie w HA/Domoticzu, podsumowanie dla czujników
   cli.js      – narzędzia administracyjne (reset hasła, lista kont)
   products.js – podpowiedzi produktów po kodzie (Open Food Facts + cache)
   images.js   – pobieranie i przechowywanie zdjęć produktów
@@ -261,6 +264,9 @@ tools/preview/ – podgląd w przeglądarce: serwer + PostgreSQL (PGlite) w jedn
 | POST | `/api/equipment/:id/documents?kind=warranty&name=plik.pdf` | Wysłanie pliku (treść żądania = plik) |
 | GET | `/api/documents/:id/file` | Pobranie dokumentu |
 | PATCH / DELETE | `/api/documents/:id` | Zmiana nazwy/rodzaju / usunięcie |
+| GET | `/api/integration/summary` | Stan domu dla wtyczek (liczniki, zakupy, terminy, leki, wpisy na dziś) |
+| GET / POST / DELETE | `/api/tokens`, `/api/tokens/:id` | Klucze API (`Authorization: Bearer hm_…`) – tylko po zalogowaniu hasłem |
+| GET / PUT | `/api/settings/embed` | Adresy, które mogą osadzać aplikację w ramce (zmiana – administrator) |
 | GET / POST | `/api/events` (`?from=2026-12-01&to=2026-12-31&home=1&mine=1&user=2`) | Wpisy w zakresie dat (z rozwiniętymi powtórzeniami) / nowy wpis |
 | GET / PUT / PATCH / DELETE | `/api/events/:id` | Wpis (prywatne widzi i zmienia tylko autor) |
 | GET / POST | `/api/medicines` (`?q=gorączka&status=expired\|expiring\|low&person=Zosia`) | Leki w apteczce / nowy lek (opcjonalnie z `quantity` i `expires_at` pierwszego opakowania) |
