@@ -2,7 +2,7 @@
 
 // Service worker: interfejs działa offline, a ostatnio pobrane dane API
 // są dostępne do podglądu bez połączenia (tylko odczyt).
-const VERSION = 'v7';
+const VERSION = 'v8';
 const SHELL_CACHE = `shell-${VERSION}`;
 const API_CACHE = `api-${VERSION}`;
 const SHELL = [
@@ -13,7 +13,10 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(SHELL_CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // cache: 'reload' – pliki prosto z serwera, z pominięciem pamięci podręcznej przeglądarki.
+  e.waitUntil(caches.open(SHELL_CACHE)
+    .then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
@@ -52,15 +55,21 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Stale-while-revalidate dla plików interfejsu.
+  // Pliki interfejsu: najpierw serwer (zawsze najnowsza wersja), bez sieci – kopia z urządzenia.
   e.respondWith(
-    caches.open(SHELL_CACHE).then(async (cache) => {
-      const cached = await cache.match(req, { ignoreSearch: true }) ||
-        (req.mode === 'navigate' ? await cache.match('/') : undefined);
-      const network = fetch(req)
-        .then((res) => { if (res.ok) cache.put(req, res.clone()); return res; })
-        .catch(() => cached);
-      return cached || network;
-    })
+    fetch(req, { cache: 'no-cache' })
+      .then((res) => {
+        if (res.ok) {
+          const copy = res.clone();
+          e.waitUntil(caches.open(SHELL_CACHE).then((c) => c.put(req, copy)));
+        }
+        return res;
+      })
+      .catch(async () => {
+        const cache = await caches.open(SHELL_CACHE);
+        return (await cache.match(req, { ignoreSearch: true }))
+          || (req.mode === 'navigate' ? await cache.match('/') : undefined)
+          || new Response('Brak połączenia', { status: 503 });
+      })
   );
 });
