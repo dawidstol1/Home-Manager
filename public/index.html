@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#2f6fde">
+  <meta name="theme-color" content="#f5f5fa" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0c0c14" media="(prefers-color-scheme: dark)">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -12,13 +13,72 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <title>Manager zasobów domowych</title>
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/plus-jakarta-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="styles.css">
+  <script>
+    // Motyw ustawiony przed malowaniem strony – bez mignięcia.
+    try { const t = localStorage.getItem('hm-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch { /* brak dostępu */ }
+  </script>
 </head>
 <body>
+  <!-- Ikony (styl liniowy, 24×24) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="g-brand" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c6cff"/><stop offset="1" stop-color="#c06bff"/></linearGradient>
+    </defs>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="i-dashboard" viewBox="0 0 24 24"><rect x="3" y="3" width="7.5" height="9" rx="2"/><rect x="13.5" y="3" width="7.5" height="5" rx="2"/><rect x="13.5" y="11" width="7.5" height="10" rx="2"/><rect x="3" y="15" width="7.5" height="6" rx="2"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5"/><path d="M12 13v8"/><path d="m7.5 5.5 9 5"/></symbol>
+    <symbol id="i-pill" viewBox="0 0 24 24"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/></symbol>
+    <symbol id="i-cross" viewBox="0 0 24 24"><path d="M9 3.5h6v5.5h5.5v6H15v5.5H9V15H3.5V9H9z"/></symbol>
+    <symbol id="i-cart" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.5 3h2.6l2.2 11.2a1.5 1.5 0 0 0 1.5 1.2h8.9a1.5 1.5 0 0 0 1.5-1.2L21 7H6"/></symbol>
+    <symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 21h18"/><rect x="5" y="11" width="3.5" height="7" rx="1"/><rect x="10.25" y="5" width="3.5" height="13" rx="1"/><rect x="15.5" y="8" width="3.5" height="10" rx="1"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.2"/><circle cx="18" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="18" r="2.2"/></symbol>
+    <symbol id="i-scan" viewBox="0 0 24 24"><path d="M3 7.5V5a2 2 0 0 1 2-2h2.5M16.5 3H19a2 2 0 0 1 2 2v2.5M21 16.5V19a2 2 0 0 1-2 2h-2.5M7.5 21H5a2 2 0 0 1-2-2v-2.5"/><path d="M7 8v8M10.5 8v8M14 8v8M17 8v8"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M14.5 4h-5L7.5 6.5H4a2 2 0 0 0-2 2V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8.5a2 2 0 0 0-2-2h-3.5z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20.5 20.5-4.5-4.5"/></symbol>
+    <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 3.5 13.5H12L11 22l9.5-11.5H12z"/></symbol>
+    <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M5 3v18l2.3-1.4L9.7 21l2.3-1.4 2.3 1.4 2.4-1.4L19 21V3l-2.3 1.4L14.3 3 12 4.4 9.7 3 7.3 4.4z"/><path d="M9 9h6M9 13h6"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M21.5 20a6.5 6.5 0 0 0-4-6"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 17l-5-5 5-5M5 12h11"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></symbol>
+    <symbol id="i-tiles" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m4.5 12.5 5 5 10-11"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11z"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M4 20h16"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 20V9M7 14l5-5 5 5M4 4h16"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="7.5" cy="7.5" r="1.5"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></symbol>
+    <symbol id="i-bottle" viewBox="0 0 24 24"><path d="M9.5 2.5h5v3h-5z"/><path d="M9.5 5.5 8 8.5a3 3 0 0 0-.5 1.7V19a2.5 2.5 0 0 0 2.5 2.5h4a2.5 2.5 0 0 0 2.5-2.5v-8.8a3 3 0 0 0-.5-1.7l-1.5-3"/><path d="M7.5 13h9"/></symbol>
+    <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 2.5S5.5 9.6 5.5 14a6.5 6.5 0 0 0 13 0C18.5 9.6 12 2.5 12 2.5z"/></symbol>
+    <symbol id="i-tube" viewBox="0 0 24 24"><path d="M6 21h12l-1.5-12h-9z"/><path d="M9.5 9V6h5v3M10.5 6V3h3v3"/></symbol>
+    <symbol id="i-spray" viewBox="0 0 24 24"><path d="M8 10h6v11H8z"/><path d="M9.5 10V7h3v3M12.5 7.5h3"/><path d="M18 5h.01M20 7h.01M18 9h.01M20 3h.01"/></symbol>
+    <symbol id="i-bandage" viewBox="0 0 24 24"><rect x="2" y="7.5" width="20" height="9" rx="4.5" transform="rotate(-45 12 12)"/><path d="M10.5 10.5h.01M13.5 13.5h.01M10.5 13.5h.01M13.5 10.5h.01"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5V5a2 2 0 0 1 2-2h14v15H6a2 2 0 0 0-2 2 2 2 0 0 0 2 2h14"/></symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3c.5 4.5 2.5 6.5 7 7-4.5.5-6.5 2.5-7 7-.5-4.5-2.5-6.5-7-7 4.5-.5 6.5-2.5 7-7z"/><path d="M19 15.5c.2 1.6.9 2.3 2.5 2.5-1.6.2-2.3.9-2.5 2.5-.2-1.6-.9-2.3-2.5-2.5 1.6-.2 2.3-.9 2.5-2.5z"/></symbol>
+  </svg>
+
   <!-- Logowanie / pierwsze uruchomienie -->
   <div class="auth-screen" id="auth-screen" hidden>
+    <div class="auth-glow" aria-hidden="true"></div>
     <form class="auth-card" id="auth-form">
-      <div class="auth-logo" aria-hidden="true">🏠</div>
+      <div class="brand-mark lg" aria-hidden="true"><svg class="ico"><use href="#i-home"/></svg></div>
       <h1 id="auth-title">Zaloguj się</h1>
       <p class="muted" id="auth-intro"></p>
       <label data-setup>Twoje imię<input name="name" autocomplete="name" maxlength="60"></label>
@@ -26,225 +86,313 @@
       <label>Hasło<input name="password" type="password" autocomplete="current-password" required></label>
       <label data-setup>Powtórz hasło<input name="password2" type="password" autocomplete="new-password"></label>
       <p class="form-error" id="auth-error" hidden></p>
-      <button class="btn primary" type="submit" id="auth-submit">Zaloguj</button>
+      <button class="btn primary lg" type="submit" id="auth-submit">Zaloguj</button>
     </form>
   </div>
 
-  <header class="topbar">
-    <div class="topbar-row">
-      <h1>🏠 Manager zasobów domowych</h1>
-      <button type="button" class="user-chip" id="user-chip" hidden title="Moje konto"></button>
+  <div class="app">
+    <!-- Menu: boczne na komputerze, dolny pasek na telefonie -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"><svg class="ico"><use href="#i-home"/></svg></div>
+        <div class="brand-text"><strong>Zasoby domowe</strong><span>Twój dom pod kontrolą</span></div>
+      </div>
+      <nav class="tabs" role="tablist" aria-label="Sekcje">
+        <span class="nav-label">Dom</span>
+        <button class="tab active" data-view="dashboard" role="tab"><svg class="ico"><use href="#i-dashboard"/></svg><span>Pulpit</span></button>
+        <button class="tab" data-view="items" role="tab"><svg class="ico"><use href="#i-box"/></svg><span>Zasoby</span></button>
+        <button class="tab" data-view="pharmacy" role="tab"><svg class="ico"><use href="#i-pill"/></svg><span>Apteka</span><span class="tab-badge danger" id="med-badge" hidden></span></button>
+        <button class="tab" data-view="shopping" role="tab"><svg class="ico"><use href="#i-cart"/></svg><span>Zakupy</span><span class="tab-badge" id="shop-badge" hidden></span></button>
+        <button class="tab tab-secondary" data-view="equipment" role="tab"><svg class="ico"><use href="#i-wrench"/></svg><span>Sprzęty</span><span class="tab-badge" id="eq-badge" hidden></span></button>
+        <span class="nav-label">Analiza</span>
+        <button class="tab tab-secondary" data-view="expenses" role="tab"><svg class="ico"><use href="#i-chart"/></svg><span>Wydatki</span></button>
+        <button class="tab" data-view="settings" role="tab"><svg class="ico"><use href="#i-grid"/></svg><span class="lbl-mobile">Więcej</span><span class="lbl-desktop">Ustawienia</span></button>
+      </nav>
+      <button type="button" class="user-card" id="user-chip" hidden title="Moje konto"></button>
+    </aside>
+
+    <div class="content">
+      <header class="page-header">
+        <div class="page-title">
+          <div class="brand-mark sm mobile-only" aria-hidden="true"><svg class="ico"><use href="#i-home"/></svg></div>
+          <div>
+            <p class="eyebrow" id="page-eyebrow"></p>
+            <h1 id="page-title">Pulpit</h1>
+          </div>
+        </div>
+        <div class="page-actions">
+          <button type="button" class="icon-btn" id="theme-btn" title="Motyw: jasny / ciemny" aria-label="Zmień motyw"><svg class="ico"><use href="#i-moon"/></svg></button>
+          <button type="button" class="avatar mobile-only" id="avatar-btn" aria-label="Moje konto" hidden></button>
+        </div>
+      </header>
+
+      <main>
+        <!-- PULPIT -->
+        <section id="view-dashboard" class="view active">
+          <div class="hero">
+            <div class="hero-text">
+              <p class="hero-greet" id="hero-greet">Dzień dobry</p>
+              <p class="hero-sub" id="hero-sub">Sprawdzam, co słychać w domu…</p>
+            </div>
+            <div class="hero-actions">
+              <button type="button" class="hero-btn" data-quick="scan"><svg class="ico"><use href="#i-scan"/></svg><span>Skanuj</span></button>
+              <button type="button" class="hero-btn" data-quick="consume"><svg class="ico"><use href="#i-zap"/></svg><span>Zużyj</span></button>
+              <button type="button" class="hero-btn" data-quick="receipt"><svg class="ico"><use href="#i-receipt"/></svg><span>Paragon</span></button>
+              <button type="button" class="hero-btn" data-quick="medicine"><svg class="ico"><use href="#i-pill"/></svg><span>Podaj lek</span></button>
+            </div>
+          </div>
+          <div class="stats" id="stats"></div>
+          <div class="grid2">
+            <div class="card">
+              <div class="card-title"><span class="ct-ico warn"><svg class="ico"><use href="#i-alert"/></svg></span><h2>Kończące się zapasy</h2></div>
+              <ul class="list" id="dash-low"></ul>
+            </div>
+            <div class="card">
+              <div class="card-title"><span class="ct-ico danger"><svg class="ico"><use href="#i-clock"/></svg></span><h2>Termin ważności (≤ 7 dni)</h2></div>
+              <ul class="list" id="dash-expiring"></ul>
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="card" id="dash-med-card" hidden>
+              <div class="card-title"><span class="ct-ico med"><svg class="ico"><use href="#i-cross"/></svg></span><h2>Domowa apteka</h2><button type="button" class="link-btn" data-goto="pharmacy">Otwórz <svg class="ico"><use href="#i-chevron"/></svg></button></div>
+              <ul class="list" id="dash-med"></ul>
+            </div>
+            <div class="card" id="dash-eq-card" hidden>
+              <div class="card-title"><span class="ct-ico"><svg class="ico"><use href="#i-shield"/></svg></span><h2>Gwarancje i przeglądy</h2></div>
+              <ul class="list" id="dash-eq"></ul>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title"><span class="ct-ico"><svg class="ico"><use href="#i-tag"/></svg></span><h2>Zasoby wg kategorii</h2></div>
+            <div id="dash-categories" class="bars"></div>
+          </div>
+        </section>
+
+        <!-- ZASOBY -->
+        <section id="view-items" class="view">
+          <div class="toolbar">
+            <label class="search"><svg class="ico"><use href="#i-search"/></svg><input type="search" id="f-q" placeholder="Szukaj produktu lub kodu…" aria-label="Szukaj"></label>
+            <select id="f-category" aria-label="Kategoria"><option value="">Wszystkie kategorie</option></select>
+            <select id="f-location" aria-label="Lokalizacja"><option value="">Wszystkie lokalizacje</option></select>
+            <select id="f-status" aria-label="Status">
+              <option value="">Każdy status</option>
+              <option value="low">Niski stan</option>
+              <option value="expiring">Wkrótce traci ważność</option>
+              <option value="expired">Przeterminowane</option>
+            </select>
+            <button class="btn" id="btn-scan"><svg class="ico"><use href="#i-scan"/></svg>Skanuj</button>
+            <button class="btn" id="btn-quick"><svg class="ico"><use href="#i-zap"/></svg>Szybkie zużycie</button>
+            <button class="btn primary" id="btn-add"><svg class="ico"><use href="#i-plus"/></svg>Dodaj zasób</button>
+          </div>
+          <div class="items-head">
+            <div class="loc-chips" id="loc-chips" role="group" aria-label="Miejsca"></div>
+            <div class="seg-ctl layout-toggle" role="group" aria-label="Układ listy">
+              <button type="button" data-layout="tiles" aria-pressed="true" title="Kafelki"><svg class="ico"><use href="#i-tiles"/></svg><span>Kafelki</span></button>
+              <button type="button" data-layout="table" aria-pressed="false" title="Lista"><svg class="ico"><use href="#i-list"/></svg><span>Lista</span></button>
+            </div>
+          </div>
+          <div class="tiles" id="items-tiles"></div>
+          <div class="table-wrap" id="items-table" hidden>
+            <table class="items">
+              <thead>
+                <tr>
+                  <th>Nazwa</th><th>Kategoria</th><th>Lokalizacja</th>
+                  <th class="num">Ilość</th><th>Ważność</th><th class="actions">Akcje</th>
+                </tr>
+              </thead>
+              <tbody id="items-body"></tbody>
+            </table>
+          </div>
+          <div class="empty-state" id="items-empty" hidden>
+            <div class="es-ico"><svg class="ico"><use href="#i-box"/></svg></div>
+            <p>Brak zasobów spełniających kryteria.</p>
+          </div>
+        </section>
+
+        <!-- DOMOWA APTEKA -->
+        <section id="view-pharmacy" class="view">
+          <div class="med-banner" id="med-expired-banner" hidden>
+            <span class="mb-ico"><svg class="ico"><use href="#i-alert"/></svg></span>
+            <div class="mb-text">
+              <strong id="med-expired-title"></strong>
+              <span>Nie wyrzucaj ich do kosza – oddaj w aptece do pojemnika na przeterminowane leki.</span>
+            </div>
+            <button type="button" class="btn sm" id="btn-med-dispose">Oddałem – usuń z apteczki</button>
+          </div>
+          <div class="toolbar">
+            <label class="search"><svg class="ico"><use href="#i-search"/></svg><input type="search" id="med-q" placeholder="Szukaj leku, substancji albo „na co” (np. gorączka)…" aria-label="Szukaj leku"></label>
+            <button class="btn" id="btn-med-scan"><svg class="ico"><use href="#i-scan"/></svg>Skanuj</button>
+            <button class="btn" id="btn-med-journal"><svg class="ico"><use href="#i-book"/></svg>Dziennik podań</button>
+            <button class="btn primary med" id="btn-med-add"><svg class="ico"><use href="#i-plus"/></svg>Dodaj lek</button>
+          </div>
+          <div class="items-head">
+            <div class="loc-chips" id="med-filters" role="group" aria-label="Filtr"></div>
+          </div>
+          <div class="med-grid" id="med-list"></div>
+          <div class="empty-state" id="med-empty" hidden>
+            <div class="es-ico med"><svg class="ico"><use href="#i-cross"/></svg></div>
+            <p id="med-empty-text">Dodaj leki, które masz w domu – aplikacja przypomni o terminach i podpowie, co podać na gorączkę czy ból głowy.</p>
+          </div>
+          <p class="muted small med-note">Aplikacja nie zastępuje ulotki ani porady lekarza lub farmaceuty.</p>
+        </section>
+
+        <!-- LISTA ZAKUPÓW -->
+        <section id="view-shopping" class="view">
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title"><span class="ct-ico"><svg class="ico"><use href="#i-cart"/></svg></span><h2>Do kupienia</h2></div>
+              <span class="row">
+                <button class="btn" data-open-receipt><svg class="ico"><use href="#i-receipt"/></svg>Skanuj paragon</button>
+                <button class="btn" id="btn-copy-shopping"><svg class="ico"><use href="#i-copy"/></svg>Kopiuj listę</button>
+              </span>
+            </div>
+            <p class="muted">Pozycje, których stan spadł do poziomu minimalnego lub niżej.</p>
+            <ul class="list shopping" id="shopping-list"></ul>
+          </div>
+        </section>
+
+        <!-- SPRZĘTY -->
+        <section id="view-equipment" class="view">
+          <div class="toolbar">
+            <label class="search"><svg class="ico"><use href="#i-search"/></svg><input type="search" id="eq-q" placeholder="Szukaj sprzętu, marki, modelu…" aria-label="Szukaj sprzętu"></label>
+            <button class="btn primary" id="btn-add-eq"><svg class="ico"><use href="#i-plus"/></svg>Dodaj sprzęt</button>
+          </div>
+          <div class="eq-list" id="eq-list"></div>
+          <div class="empty-state" id="eq-empty" hidden>
+            <div class="es-ico"><svg class="ico"><use href="#i-wrench"/></svg></div>
+            <p>Dodaj pralkę, telewizor czy wiertarkę – z gwarancją, paragonem i instrukcją w jednym miejscu.</p>
+          </div>
+        </section>
+
+        <!-- WYDATKI -->
+        <section id="view-expenses" class="view">
+          <div class="toolbar">
+            <div class="seg-ctl" role="group" aria-label="Okres">
+              <button type="button" data-months="3" aria-pressed="false">3 mies.</button>
+              <button type="button" data-months="6" aria-pressed="true">6 mies.</button>
+              <button type="button" data-months="12" aria-pressed="false">12 mies.</button>
+            </div>
+            <button class="btn primary push-right" data-open-receipt><svg class="ico"><use href="#i-receipt"/></svg>Skanuj paragon</button>
+          </div>
+          <div class="stats" id="exp-stats"></div>
+          <div class="grid2">
+            <div class="card">
+              <h2>Wydatki na zakupy</h2>
+              <div class="colchart" id="chart-spent" role="img"></div>
+            </div>
+            <div class="card">
+              <h2>Zmarnowane (wartość wyrzuconych)</h2>
+              <div class="colchart waste" id="chart-wasted" role="img"></div>
+            </div>
+          </div>
+          <details class="card table-toggle">
+            <summary>Pokaż dane w tabeli</summary>
+            <div class="table-wrap plain"><table class="items" id="exp-table"></table></div>
+          </details>
+          <div class="grid2">
+            <div class="card">
+              <h2>Na co wydajemy</h2>
+              <div class="bars" id="exp-categories"></div>
+            </div>
+            <div class="card">
+              <h2>Najczęściej wyrzucane</h2>
+              <ul class="list" id="exp-wasted"></ul>
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="card">
+              <h2>Ostatnie paragony</h2>
+              <ul class="list" id="exp-receipts"></ul>
+            </div>
+            <div class="card">
+              <h2>Domownicy</h2>
+              <ul class="list" id="exp-users"></ul>
+            </div>
+          </div>
+          <p class="muted small">Wydatki liczą się z paragonów i zakupów z podaną ceną. Produkty dodane jako stan początkowy nie są wydatkiem.</p>
+        </section>
+
+        <!-- USTAWIENIA / WIĘCEJ -->
+        <section id="view-settings" class="view">
+          <div class="hub mobile-only">
+            <button type="button" class="hub-tile" data-goto="equipment"><span class="ht-ico"><svg class="ico"><use href="#i-wrench"/></svg></span><span><strong>Sprzęty i dokumenty</strong><span class="muted small">Gwarancje, przeglądy, instrukcje</span></span><span class="tab-badge" id="eq-badge-hub" hidden></span><svg class="ico chev"><use href="#i-chevron"/></svg></button>
+            <button type="button" class="hub-tile" data-goto="expenses"><span class="ht-ico alt"><svg class="ico"><use href="#i-chart"/></svg></span><span><strong>Wydatki i marnowanie</strong><span class="muted small">Wykresy, paragony, domownicy</span></span><svg class="ico chev"><use href="#i-chevron"/></svg></button>
+          </div>
+          <div class="grid2">
+            <div class="card">
+              <div class="card-title"><span class="ct-ico"><svg class="ico"><use href="#i-user"/></svg></span><h2>Moje konto</h2></div>
+              <p id="me-info"></p>
+              <form id="password-form" class="stack">
+                <input name="current_password" type="password" placeholder="Obecne hasło" autocomplete="current-password" required>
+                <input name="new_password" type="password" placeholder="Nowe hasło (min. 8 znaków)" autocomplete="new-password" minlength="8" required>
+                <span class="row"><button class="btn">Zmień hasło</button><button type="button" class="btn danger" id="btn-logout"><svg class="ico"><use href="#i-logout"/></svg>Wyloguj</button></span>
+              </form>
+            </div>
+            <div class="card">
+              <div class="card-title"><span class="ct-ico"><svg class="ico"><use href="#i-users"/></svg></span><h2>Domownicy</h2></div>
+              <ul class="list" id="users-list"></ul>
+              <form id="user-form" class="stack admin-only">
+                <h3 class="small-h">Dodaj domownika</h3>
+                <span class="row">
+                  <input name="name" placeholder="Imię" required maxlength="60">
+                  <input name="login" placeholder="Login" required autocapitalize="none" spellcheck="false">
+                </span>
+                <span class="row">
+                  <input name="password" type="password" placeholder="Hasło (min. 8 znaków)" required minlength="8" autocomplete="new-password">
+                  <select name="role" aria-label="Rola"><option value="member">Domownik</option><option value="admin">Administrator</option></select>
+                </span>
+                <button class="btn primary">Dodaj</button>
+              </form>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title"><span class="ct-ico"><svg class="ico"><use href="#i-sun"/></svg></span><h2>Wygląd</h2></div>
+            <div class="seg-ctl" role="radiogroup" aria-label="Motyw" id="theme-seg">
+              <button type="button" data-theme-set="system" aria-pressed="true"><svg class="ico"><use href="#i-monitor"/></svg><span>Jak w systemie</span></button>
+              <button type="button" data-theme-set="light" aria-pressed="false"><svg class="ico"><use href="#i-sun"/></svg><span>Jasny</span></button>
+              <button type="button" data-theme-set="dark" aria-pressed="false"><svg class="ico"><use href="#i-moon"/></svg><span>Ciemny</span></button>
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="card">
+              <h2>Kategorie</h2>
+              <form class="inline-form" data-dict="categories">
+                <input name="name" placeholder="Nowa kategoria" required>
+                <button class="btn primary">Dodaj</button>
+              </form>
+              <ul class="list" id="dict-categories"></ul>
+            </div>
+            <div class="card">
+              <h2>Lokalizacje</h2>
+              <form class="inline-form" data-dict="locations">
+                <input name="name" placeholder="Nowa lokalizacja" required>
+                <button class="btn primary">Dodaj</button>
+              </form>
+              <ul class="list" id="dict-locations"></ul>
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="card">
+              <div class="card-title"><span class="ct-ico"><svg class="ico"><use href="#i-image"/></svg></span><h2>Zdjęcia produktów</h2></div>
+              <p class="muted">Zdjęcia pobierają się same z bazy Open Food Facts dla produktów z kodem kreskowym (głównie żywność). Tu pobierzesz brakujące dla produktów dodanych wcześniej.</p>
+              <div class="row">
+                <button class="btn" id="btn-fill-photos" type="button">Pobierz brakujące zdjęcia</button>
+                <span class="muted" id="fill-photos-status" role="status"></span>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-title"><span class="ct-ico"><svg class="ico"><use href="#i-download"/></svg></span><h2>Kopia zapasowa</h2></div>
+              <p class="muted">Eksport zapisuje zapasy (produkty, partie, kategorie, miejsca) i domową apteczkę do pliku JSON. Import <strong>zastępuje</strong> je danymi z pliku – sprzęty, dokumenty i konta zostają.</p>
+              <div class="row">
+                <button class="btn" id="btn-export"><svg class="ico"><use href="#i-download"/></svg>Eksportuj JSON</button>
+                <label class="btn admin-only"><svg class="ico"><use href="#i-upload"/></svg>Importuj JSON<input type="file" id="import-file" accept="application/json" hidden></label>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
-    <nav class="tabs" role="tablist">
-      <button class="tab active" data-view="dashboard" role="tab"><span class="tab-ico" aria-hidden="true">📊</span><span>Pulpit</span></button>
-      <button class="tab" data-view="items" role="tab"><span class="tab-ico" aria-hidden="true">📦</span><span>Zasoby</span></button>
-      <button class="tab" data-view="shopping" role="tab"><span class="tab-ico" aria-hidden="true">🛒</span><span>Zakupy</span><span class="tab-badge" id="shop-badge" hidden></span></button>
-      <button class="tab" data-view="equipment" role="tab"><span class="tab-ico" aria-hidden="true">🔧</span><span>Sprzęty</span><span class="tab-badge" id="eq-badge" hidden></span></button>
-      <button class="tab" data-view="expenses" role="tab"><span class="tab-ico" aria-hidden="true">💰</span><span>Wydatki</span></button>
-      <button class="tab" data-view="settings" role="tab"><span class="tab-ico" aria-hidden="true">⚙️</span><span>Więcej</span></button>
-    </nav>
-  </header>
-
-  <main>
-    <!-- PULPIT -->
-    <section id="view-dashboard" class="view active">
-      <div class="stats" id="stats"></div>
-      <div class="grid2">
-        <div class="card">
-          <h2>⚠️ Kończące się zapasy</h2>
-          <ul class="list" id="dash-low"></ul>
-        </div>
-        <div class="card">
-          <h2>⏰ Termin ważności (≤ 7 dni)</h2>
-          <ul class="list" id="dash-expiring"></ul>
-        </div>
-      </div>
-      <div class="card" id="dash-eq-card" hidden>
-        <h2>🔧 Gwarancje i przeglądy</h2>
-        <ul class="list" id="dash-eq"></ul>
-      </div>
-      <div class="card">
-        <h2>Zasoby wg kategorii</h2>
-        <div id="dash-categories" class="bars"></div>
-      </div>
-    </section>
-
-    <!-- ZASOBY -->
-    <section id="view-items" class="view">
-      <div class="toolbar">
-        <input type="search" id="f-q" placeholder="Szukaj…" aria-label="Szukaj">
-        <select id="f-category" aria-label="Kategoria"><option value="">Wszystkie kategorie</option></select>
-        <select id="f-location" aria-label="Lokalizacja"><option value="">Wszystkie lokalizacje</option></select>
-        <select id="f-status" aria-label="Status">
-          <option value="">Każdy status</option>
-          <option value="low">Niski stan</option>
-          <option value="expiring">Wkrótce traci ważność</option>
-          <option value="expired">Przeterminowane</option>
-        </select>
-        <button class="btn" id="btn-scan">📷 Skanuj</button>
-        <button class="btn" id="btn-quick">⚡ Szybkie zużycie</button>
-        <button class="btn primary" id="btn-add">+ Dodaj zasób</button>
-      </div>
-      <div class="items-head">
-        <div class="loc-chips" id="loc-chips" role="group" aria-label="Miejsca"></div>
-        <div class="layout-toggle" role="group" aria-label="Układ listy">
-          <button type="button" class="btn sm" data-layout="tiles" aria-pressed="true">▦ Kafelki</button>
-          <button type="button" class="btn sm" data-layout="table" aria-pressed="false">☰ Tabela</button>
-        </div>
-      </div>
-      <div class="tiles" id="items-tiles"></div>
-      <div class="table-wrap" id="items-table" hidden>
-        <table class="items">
-          <thead>
-            <tr>
-              <th>Nazwa</th><th>Kategoria</th><th>Lokalizacja</th>
-              <th class="num">Ilość</th><th>Ważność</th><th class="actions">Akcje</th>
-            </tr>
-          </thead>
-          <tbody id="items-body"></tbody>
-        </table>
-      </div>
-      <p class="empty" id="items-empty" hidden>Brak zasobów spełniających kryteria.</p>
-    </section>
-
-    <!-- LISTA ZAKUPÓW -->
-    <section id="view-shopping" class="view">
-      <div class="card">
-        <div class="card-head">
-          <h2>🛒 Do kupienia</h2>
-          <span class="row">
-            <button class="btn" data-open-receipt>🧾 Skanuj paragon</button>
-            <button class="btn" id="btn-copy-shopping">Kopiuj listę</button>
-          </span>
-        </div>
-        <p class="muted">Pozycje, których stan spadł do poziomu minimalnego lub niżej.</p>
-        <ul class="list shopping" id="shopping-list"></ul>
-      </div>
-    </section>
-
-    <!-- SPRZĘTY -->
-    <section id="view-equipment" class="view">
-      <div class="toolbar">
-        <input type="search" id="eq-q" placeholder="Szukaj sprzętu, marki, modelu…" aria-label="Szukaj sprzętu">
-        <button class="btn primary" id="btn-add-eq">+ Dodaj sprzęt</button>
-      </div>
-      <div class="eq-list" id="eq-list"></div>
-      <p class="empty" id="eq-empty" hidden>Dodaj pralkę, telewizor czy wiertarkę – z gwarancją, paragonem i instrukcją w jednym miejscu.</p>
-    </section>
-
-    <!-- WYDATKI -->
-    <section id="view-expenses" class="view">
-      <div class="toolbar">
-        <div class="seg" role="group" aria-label="Okres">
-          <button type="button" class="btn sm" data-months="3" aria-pressed="false">3 mies.</button>
-          <button type="button" class="btn sm" data-months="6" aria-pressed="true">6 mies.</button>
-          <button type="button" class="btn sm" data-months="12" aria-pressed="false">12 mies.</button>
-        </div>
-        <button class="btn primary push-right" data-open-receipt>🧾 Skanuj paragon</button>
-      </div>
-      <div class="stats" id="exp-stats"></div>
-      <div class="grid2">
-        <div class="card">
-          <h2>Wydatki na zakupy</h2>
-          <div class="colchart" id="chart-spent" role="img"></div>
-        </div>
-        <div class="card">
-          <h2>Zmarnowane (wartość wyrzuconych)</h2>
-          <div class="colchart waste" id="chart-wasted" role="img"></div>
-        </div>
-      </div>
-      <details class="card table-toggle">
-        <summary>Pokaż dane w tabeli</summary>
-        <div class="table-wrap plain"><table class="items" id="exp-table"></table></div>
-      </details>
-      <div class="grid2">
-        <div class="card">
-          <h2>Na co wydajemy</h2>
-          <div class="bars" id="exp-categories"></div>
-        </div>
-        <div class="card">
-          <h2>🗑 Najczęściej wyrzucane</h2>
-          <ul class="list" id="exp-wasted"></ul>
-        </div>
-      </div>
-      <div class="grid2">
-        <div class="card">
-          <h2>🧾 Ostatnie paragony</h2>
-          <ul class="list" id="exp-receipts"></ul>
-        </div>
-        <div class="card">
-          <h2>👥 Domownicy</h2>
-          <ul class="list" id="exp-users"></ul>
-        </div>
-      </div>
-      <p class="muted small">Wydatki liczą się z paragonów i zakupów z podaną ceną. Produkty dodane jako stan początkowy nie są wydatkiem.</p>
-    </section>
-
-    <!-- USTAWIENIA -->
-    <section id="view-settings" class="view">
-      <div class="grid2">
-        <div class="card">
-          <h2>👤 Moje konto</h2>
-          <p id="me-info"></p>
-          <form id="password-form" class="stack">
-            <input name="current_password" type="password" placeholder="Obecne hasło" autocomplete="current-password" required>
-            <input name="new_password" type="password" placeholder="Nowe hasło (min. 8 znaków)" autocomplete="new-password" minlength="8" required>
-            <span class="row"><button class="btn">Zmień hasło</button><button type="button" class="btn danger" id="btn-logout">Wyloguj</button></span>
-          </form>
-        </div>
-        <div class="card">
-          <h2>👥 Domownicy</h2>
-          <ul class="list" id="users-list"></ul>
-          <form id="user-form" class="stack admin-only">
-            <h3 class="small-h">Dodaj domownika</h3>
-            <span class="row">
-              <input name="name" placeholder="Imię" required maxlength="60">
-              <input name="login" placeholder="Login" required autocapitalize="none" spellcheck="false">
-            </span>
-            <span class="row">
-              <input name="password" type="password" placeholder="Hasło (min. 8 znaków)" required minlength="8" autocomplete="new-password">
-              <select name="role" aria-label="Rola"><option value="member">Domownik</option><option value="admin">Administrator</option></select>
-            </span>
-            <button class="btn primary">Dodaj</button>
-          </form>
-        </div>
-      </div>
-      <div class="grid2">
-        <div class="card">
-          <h2>Kategorie</h2>
-          <form class="inline-form" data-dict="categories">
-            <input name="name" placeholder="Nowa kategoria" required>
-            <button class="btn primary">Dodaj</button>
-          </form>
-          <ul class="list" id="dict-categories"></ul>
-        </div>
-        <div class="card">
-          <h2>Lokalizacje</h2>
-          <form class="inline-form" data-dict="locations">
-            <input name="name" placeholder="Nowa lokalizacja" required>
-            <button class="btn primary">Dodaj</button>
-          </form>
-          <ul class="list" id="dict-locations"></ul>
-        </div>
-      </div>
-      <div class="card">
-        <h2>Zdjęcia produktów</h2>
-        <p class="muted">Zdjęcia pobierają się same z bazy Open Food Facts dla produktów z kodem kreskowym (głównie żywność). Tu możesz pobrać brakujące dla produktów dodanych wcześniej.</p>
-        <div class="row">
-          <button class="btn" id="btn-fill-photos" type="button">Pobierz brakujące zdjęcia</button>
-          <span class="muted" id="fill-photos-status" role="status"></span>
-        </div>
-      </div>
-      <div class="card">
-        <h2>Kopia zapasowa</h2>
-        <p class="muted">Eksport zapisuje zapasy (produkty, partie, kategorie, miejsca) do pliku JSON. Import <strong>zastępuje</strong> bieżące zapasy – sprzęty, dokumenty i konta zostają. Pełną kopię (z dokumentami) robi się na serwerze – patrz instrukcja instalacji.</p>
-        <div class="row">
-          <button class="btn" id="btn-export">Eksportuj JSON</button>
-          <label class="btn admin-only">Importuj JSON<input type="file" id="import-file" accept="application/json" hidden></label>
-        </div>
-      </div>
-    </section>
-  </main>
+  </div>
 
   <!-- Formularz zasobu -->
   <dialog id="item-dialog">
@@ -271,13 +419,13 @@
       <label class="full">Kod kreskowy
         <span class="input-with-btn">
           <input name="barcode" inputmode="numeric" autocomplete="off" maxlength="64" placeholder="EAN / kod produktu">
-          <button type="button" class="btn" id="form-scan-barcode" title="Skanuj kod">📷</button>
+          <button type="button" class="btn icon" id="form-scan-barcode" title="Skanuj kod" aria-label="Skanuj kod"><svg class="ico"><use href="#i-scan"/></svg></button>
         </span>
       </label>
       <label class="full" data-single>Data ważności
         <span class="input-with-btn">
           <input name="expires_at" type="date">
-          <button type="button" class="btn" id="form-scan-expiry" title="Odczytaj datę z etykiety">📷 Z etykiety</button>
+          <button type="button" class="btn" id="form-scan-expiry" title="Odczytaj datę z etykiety"><svg class="ico"><use href="#i-camera"/></svg>Z etykiety</button>
         </span>
       </label>
       <div class="full batches" id="item-batches" hidden>
@@ -291,7 +439,7 @@
           <input type="number" min="0" step="any" id="batch-add-qty" placeholder="Ilość" aria-label="Ilość nowej partii">
           <input type="date" id="batch-add-date" aria-label="Data ważności nowej partii">
           <input type="number" min="0" step="0.01" id="batch-add-total" placeholder="Zapłacono zł" aria-label="Kwota zakupu">
-          <button type="button" class="btn sm" id="batch-add-btn">+ Dodaj partię</button>
+          <button type="button" class="btn sm" id="batch-add-btn"><svg class="ico"><use href="#i-plus"/></svg>Partia</button>
         </div>
       </div>
       <label class="full">Notatki<textarea name="notes" rows="2"></textarea></label>
@@ -307,6 +455,108 @@
     </datalist>
   </dialog>
 
+  <!-- Lek -->
+  <dialog id="med-dialog" class="wide-dialog">
+    <form id="med-form">
+      <div class="dialog-head full">
+        <span class="med-ico lg" id="med-form-ico" aria-hidden="true"><svg class="ico"><use href="#i-pill"/></svg></span>
+        <h2 id="med-dialog-title">Nowy lek</h2>
+      </div>
+      <input type="hidden" name="id">
+      <label class="full">Nazwa leku*<input name="name" required maxlength="200" placeholder="np. Paracetamol, Ibuprom dla dzieci, Sudafed"></label>
+      <label>Substancja czynna<input name="substance" maxlength="200" placeholder="np. ibuprofen"></label>
+      <label>Dawka / moc<input name="strength" maxlength="60" placeholder="np. 500 mg, 100 mg/5 ml"></label>
+      <label>Postać<input name="form" list="med-forms" maxlength="60" placeholder="tabletki, syrop, maść…"></label>
+      <label>Jednostka<input name="unit" list="med-units" maxlength="20" value="tabl."></label>
+      <label class="full">Na co?<input name="purpose" maxlength="300" placeholder="np. ból, gorączka, katar – po przecinku"></label>
+      <label>Dla kogo<input name="person" list="med-persons" maxlength="100" placeholder="np. Wszyscy, Zosia, dorośli"></label>
+      <label>Gdzie leży<input name="kit" list="med-kits" maxlength="100" placeholder="np. Apteczka w łazience"></label>
+      <label>Stan minimalny<input name="min_quantity" type="number" min="0" step="any" value="0"></label>
+      <label>Ważny po otwarciu (dni)<input name="after_opening_days" type="number" min="1" step="1" placeholder="np. 180 dla syropu"></label>
+      <label class="full">Kod kreskowy
+        <span class="input-with-btn">
+          <input name="barcode" inputmode="numeric" autocomplete="off" maxlength="64" placeholder="kod z opakowania">
+          <button type="button" class="btn icon" id="med-scan-barcode" title="Skanuj kod" aria-label="Skanuj kod"><svg class="ico"><use href="#i-scan"/></svg></button>
+        </span>
+      </label>
+      <label class="check full"><input type="checkbox" name="prescription"> Lek na receptę</label>
+      <label class="full">Dawkowanie<textarea name="dosage" rows="2" placeholder="np. 1–2 tabl. co 6 h, maks. 8 tabl. na dobę"></textarea></label>
+      <div class="full med-first" id="med-first">
+        <label>Ilość w opakowaniu<input name="quantity" type="number" min="0" step="any" placeholder="np. 20"></label>
+        <label>Ważny do<span class="input-with-btn"><input name="expires_at" type="date"><button type="button" class="btn icon" id="med-scan-expiry" title="Odczytaj datę z opakowania" aria-label="Odczytaj datę z opakowania"><svg class="ico"><use href="#i-camera"/></svg></button></span></label>
+      </div>
+      <div class="full batches" id="med-packs" hidden>
+        <div class="batches-head"><strong>Opakowania</strong><span class="muted small" id="med-packs-sum"></span></div>
+        <p class="muted small">Każde opakowanie ma własny termin. Podanie leku zdejmuje najpierw z otwartego opakowania.</p>
+        <ul class="pack-list" id="med-pack-list"></ul>
+        <div class="batch-add pack-add">
+          <input type="number" min="0" step="any" id="pack-add-qty" placeholder="Ilość" aria-label="Ilość w nowym opakowaniu">
+          <input type="date" id="pack-add-date" aria-label="Ważne do">
+          <button type="button" class="btn sm" id="pack-add-btn"><svg class="ico"><use href="#i-plus"/></svg>Opakowanie</button>
+        </div>
+      </div>
+      <label class="full">Notatki<textarea name="notes" rows="2" placeholder="np. nie podawać na pusty żołądek"></textarea></label>
+      <div class="full med-log-box" id="med-log-box" hidden>
+        <div class="batches-head"><strong>Historia</strong></div>
+        <ul class="list compact" id="med-log"></ul>
+      </div>
+      <p class="form-error full" id="med-error" hidden></p>
+      <div class="dialog-actions full">
+        <button type="button" class="btn danger spacer" id="med-delete" hidden>Usuń lek</button>
+        <button type="button" class="btn" data-close>Zamknij</button>
+        <button type="submit" class="btn primary med">Zapisz</button>
+      </div>
+    </form>
+    <datalist id="med-forms">
+      <option value="tabletki"><option value="kapsułki"><option value="syrop"><option value="zawiesina"><option value="krople"><option value="maść"><option value="krem"><option value="żel"><option value="aerozol"><option value="czopki"><option value="saszetki"><option value="plastry"><option value="opatrunek">
+    </datalist>
+    <datalist id="med-units">
+      <option value="tabl."><option value="kaps."><option value="ml"><option value="g"><option value="szt."><option value="saszetki"><option value="dawki">
+    </datalist>
+    <datalist id="med-persons"></datalist>
+    <datalist id="med-kits"></datalist>
+  </dialog>
+
+  <!-- Podanie leku -->
+  <dialog id="take-dialog">
+    <form id="take-form">
+      <div class="dialog-head">
+        <span class="med-ico lg" id="take-ico" aria-hidden="true"><svg class="ico"><use href="#i-pill"/></svg></span>
+        <div><h2 id="take-title">Podaj lek</h2><p class="muted small" id="take-sub"></p></div>
+      </div>
+      <div class="take-last" id="take-last" hidden></div>
+      <p class="take-dosage" id="take-dosage" hidden></p>
+      <label class="stack-label">Ile
+        <span class="stepper">
+          <button type="button" class="btn icon" data-step="-1" aria-label="Mniej"><svg class="ico"><use href="#i-minus"/></svg></button>
+          <input name="amount" type="number" min="0" step="any" value="1" required>
+          <span class="stepper-unit" id="take-unit">tabl.</span>
+          <button type="button" class="btn icon" data-step="1" aria-label="Więcej"><svg class="ico"><use href="#i-plus"/></svg></button>
+        </span>
+      </label>
+      <div class="stack-label">Komu
+        <div class="loc-chips wrap" id="take-persons"></div>
+        <input name="person" maxlength="100" placeholder="imię (opcjonalnie)" list="med-persons">
+      </div>
+      <label class="stack-label">Notatka<input name="note" maxlength="300" placeholder="np. gorączka 38,5°C"></label>
+      <p class="form-error" id="take-error" hidden></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn" data-close>Anuluj</button>
+        <button type="submit" class="btn primary med"><svg class="ico"><use href="#i-check"/></svg>Zapisz podanie</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Dziennik podań -->
+  <dialog id="journal-dialog">
+    <div class="dialog-head">
+      <span class="med-ico lg" aria-hidden="true"><svg class="ico"><use href="#i-book"/></svg></span>
+      <div><h2>Dziennik podań</h2><p class="muted small">Kto, co i kiedy dostał – przydaje się przy gorączce i u lekarza.</p></div>
+    </div>
+    <ul class="list journal" id="journal-list"></ul>
+    <div class="dialog-actions"><button class="btn" data-close>Zamknij</button></div>
+  </dialog>
+
   <!-- Skaner kodów kreskowych -->
   <dialog id="scan-dialog">
     <h2>Skanuj kod kreskowy</h2>
@@ -316,7 +566,7 @@
     </div>
     <p class="muted" id="scan-hint"></p>
     <div class="row">
-      <label class="btn primary">📷 Zrób zdjęcie kodu<input type="file" accept="image/*" capture="environment" id="scan-photo" hidden></label>
+      <label class="btn primary"><svg class="ico"><use href="#i-camera"/></svg>Zrób zdjęcie kodu<input type="file" accept="image/*" capture="environment" id="scan-photo" hidden></label>
     </div>
     <form id="scan-manual" class="inline-form scan-manual">
       <input name="code" placeholder="…lub wpisz kod ręcznie" inputmode="numeric" autocomplete="off">
@@ -341,7 +591,7 @@
   <dialog id="ocr-dialog">
     <h2>Data ważności z etykiety</h2>
     <p class="muted">Zrób wyraźne zdjęcie fragmentu etykiety z datą („Najlepiej spożyć przed…”, „EXP”).</p>
-    <label class="btn primary">📷 Zrób zdjęcie etykiety<input type="file" accept="image/*" capture="environment" id="ocr-photo" hidden></label>
+    <label class="btn primary"><svg class="ico"><use href="#i-camera"/></svg>Zrób zdjęcie etykiety<input type="file" accept="image/*" capture="environment" id="ocr-photo" hidden></label>
     <img id="ocr-preview" class="ocr-preview" alt="Zdjęcie etykiety" hidden>
     <p class="muted" id="ocr-status" role="status"></p>
     <div id="ocr-result" hidden>
@@ -356,25 +606,25 @@
 
   <!-- Szybkie zużycie -->
   <dialog id="quick-dialog">
-    <h2>⚡ Szybkie zużycie</h2>
+    <h2>Szybkie zużycie</h2>
     <p class="muted">Skanuj kody kolejnych opakowań – każdy skan zdejmuje 1 szt. z partii o najkrótszym terminie. Skaner otwiera się ponownie, aż go zamkniesz.</p>
     <div class="seg" role="radiogroup" aria-label="Powód">
-      <label class="seg-opt"><input type="radio" name="quick-reason" value="used" checked> ✅ Zużyte</label>
-      <label class="seg-opt"><input type="radio" name="quick-reason" value="wasted"> 🗑 Wyrzucone</label>
+      <label class="seg-opt"><input type="radio" name="quick-reason" value="used" checked> Zużyte</label>
+      <label class="seg-opt"><input type="radio" name="quick-reason" value="wasted"> Wyrzucone</label>
     </div>
-    <button class="btn primary wide" id="quick-scan">📷 Skanuj</button>
+    <button class="btn primary wide" id="quick-scan"><svg class="ico"><use href="#i-scan"/></svg>Skanuj</button>
     <ul class="list" id="quick-log"></ul>
     <div class="dialog-actions"><button class="btn" data-close>Gotowe</button></div>
   </dialog>
 
   <!-- Paragon -->
   <dialog id="receipt-dialog" class="wide-dialog">
-    <h2>🧾 Paragon</h2>
+    <h2>Paragon</h2>
     <div id="receipt-step1">
       <p class="muted">Zrób zdjęcie całego paragonu (płasko, przy dobrym świetle). Aplikacja odczyta pozycje i dopasuje je do Twoich produktów – przed zapisem wszystko sprawdzisz.</p>
       <div class="row">
-        <label class="btn primary">📷 Zdjęcie paragonu<input type="file" accept="image/*" capture="environment" id="receipt-photo" hidden></label>
-        <button type="button" class="btn" id="receipt-paste-toggle">⌨️ Wklej tekst</button>
+        <label class="btn primary"><svg class="ico"><use href="#i-camera"/></svg>Zdjęcie paragonu<input type="file" accept="image/*" capture="environment" id="receipt-photo" hidden></label>
+        <button type="button" class="btn" id="receipt-paste-toggle">Wklej tekst</button>
       </div>
       <div id="receipt-paste" hidden>
         <textarea id="receipt-text" rows="8" placeholder="Wklej tekst paragonu (np. z e-paragonu)…"></textarea>
@@ -390,7 +640,7 @@
       </div>
       <div class="receipt-lines" id="receipt-lines"></div>
       <p class="muted small" id="receipt-summary"></p>
-      <button type="button" class="btn sm" id="receipt-add-line">+ Dodaj pozycję</button>
+      <button type="button" class="btn sm" id="receipt-add-line"><svg class="ico"><use href="#i-plus"/></svg>Dodaj pozycję</button>
       <details><summary>Rozpoznany tekst</summary><pre id="receipt-raw"></pre></details>
       <p class="form-error" id="receipt-error" hidden></p>
       <div class="dialog-actions">
@@ -430,14 +680,14 @@
         <ul class="list doc-list" id="eq-doc-list"></ul>
         <div class="doc-upload">
           <select id="doc-kind" aria-label="Rodzaj dokumentu">
-            <option value="receipt">🧾 Paragon / faktura</option>
-            <option value="warranty">📜 Gwarancja</option>
-            <option value="manual">📘 Instrukcja</option>
-            <option value="photo">📷 Zdjęcie</option>
-            <option value="other">📎 Inny</option>
+            <option value="receipt">Paragon / faktura</option>
+            <option value="warranty">Gwarancja</option>
+            <option value="manual">Instrukcja</option>
+            <option value="photo">Zdjęcie</option>
+            <option value="other">Inny</option>
           </select>
-          <label class="btn">📎 Dodaj plik<input type="file" id="doc-file" accept="application/pdf,image/*,text/plain" multiple hidden></label>
-          <label class="btn">📷 Zrób zdjęcie<input type="file" id="doc-camera" accept="image/*" capture="environment" hidden></label>
+          <label class="btn"><svg class="ico"><use href="#i-upload"/></svg>Dodaj plik<input type="file" id="doc-file" accept="application/pdf,image/*,text/plain" multiple hidden></label>
+          <label class="btn"><svg class="ico"><use href="#i-camera"/></svg>Zrób zdjęcie<input type="file" id="doc-camera" accept="image/*" capture="environment" hidden></label>
         </div>
         <p class="muted small" id="doc-status" role="status">PDF, zdjęcia lub tekst, do 25 MB.</p>
       </div>
@@ -458,7 +708,20 @@
     <div class="dialog-actions"><button class="btn" data-close>Zamknij</button></div>
   </dialog>
 
-  <button type="button" class="fab" id="fab-scan" aria-label="Skanuj produkt">📷</button>
+  <!-- Potwierdzenie (zamiast okienek przeglądarki) -->
+  <dialog id="confirm-dialog" class="confirm">
+    <form method="dialog">
+      <h2 id="confirm-title">Na pewno?</h2>
+      <p class="muted" id="confirm-text"></p>
+      <input id="confirm-input" hidden>
+      <div class="dialog-actions">
+        <button class="btn" value="cancel">Anuluj</button>
+        <button class="btn primary" value="ok" id="confirm-ok">OK</button>
+      </div>
+    </form>
+  </dialog>
+
+  <button type="button" class="fab" id="fab-scan" aria-label="Skanuj produkt"><svg class="ico"><use href="#i-scan"/></svg></button>
 
   <div id="toast" role="status" aria-live="polite"></div>
 

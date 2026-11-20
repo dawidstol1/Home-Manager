@@ -2,12 +2,14 @@
 
 // Service worker: interfejs działa offline, a ostatnio pobrane dane API
 // są dostępne do podglądu bez połączenia (tylko odczyt).
-const VERSION = 'v6';
+const VERSION = 'v7';
 const SHELL_CACHE = `shell-${VERSION}`;
 const API_CACHE = `api-${VERSION}`;
 const SHELL = [
   '/', '/index.html', '/styles.css', '/app.js', '/scanner.js', '/vendor/zxing.min.js', '/manifest.webmanifest',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png',
+  '/fonts/inter-latin-wght-normal.woff2', '/fonts/inter-latin-ext-wght-normal.woff2',
+  '/fonts/plus-jakarta-sans-latin-wght-normal.woff2', '/fonts/plus-jakarta-sans-latin-ext-wght-normal.woff2',
 ];
 
 self.addEventListener('install', (e) => {

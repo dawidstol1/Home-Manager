@@ -119,12 +119,10 @@ useradd --system --home /var/lib/home-manager --shell /usr/sbin/nologin homemana
 mkdir -p /var/lib/home-manager/images /var/lib/home-manager/uploads /etc/home-manager
 chown -R homemanager:homemanager /var/lib/home-manager
 
-git clone -b claude/home-resource-manager-4j0mba https://github.com/dawidstol1/Home-Manager.git /opt/home-manager
+git clone https://github.com/dawidstol1/Home-Manager.git /opt/home-manager
 cd /opt/home-manager
 npm ci --omit=dev
 ```
-
-> Gdy zmiany trafią do gałęzi `main`, zamiast `-b claude/home-resource-manager-4j0mba` użyj `-b main`.
 
 ### 2.4. Konfiguracja
 

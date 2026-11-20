@@ -23,6 +23,11 @@ ile zostało, kiedy traci ważność i co trzeba dokupić.
 - **Skan paragonu** – zdjęcie paragonu → OCR → pozycje dopasowane do produktów (aplikacja zapamiętuje dopasowania), zapis zakupów jednym przyciskiem
 - **Konta domowników** – logowanie, administrator dodaje domowników; historia pokazuje, kto co zużył lub kupił
 - **Sprzęty i dokumenty** – gwarancje, przeglądy, paragony, instrukcje (PDF/zdjęcia) przy każdym sprzęcie, przypomnienia na pulpicie
+- **Domowa apteka** – leki z substancją, dawką, postacią, „na co” i „dla kogo”; kilka opakowań z własnymi terminami;
+  termin po otwarciu (np. syrop 6 miesięcy), przycisk „Podaj” z dziennikiem podań (kto, ile, kiedy – z ostrzeżeniem o świeżej
+  dawce), wyszukiwanie po objawie („gorączka”), lista leków po terminie do oddania w aptece
+- **Nowoczesny wygląd** – menu boczne na komputerze, pływający pasek na telefonie, okna jako arkusze od dołu,
+  jasny i ciemny motyw (automatycznie albo do wyboru), fonty dołączone do aplikacji (działa bez internetu)
 
 ## Instalacja na własnym serwerze (Ubuntu, bez Dockera)
 
@@ -83,7 +88,8 @@ Zmienne środowiskowe:
 
 **Baza danych:** `items` (produkty), `batches` (partie z datami ważności – stan produktu to ich suma),
 `history` (każda zmiana stanu: powód zakup/zużycie/wyrzucenie/korekta, kwota, kto), `receipts` i `receipt_aliases`
-(paragony i zapamiętane dopasowania nazw), `equipment` i `documents` (sprzęty i ich pliki), `users` i `sessions`
+(paragony i zapamiętane dopasowania nazw), `equipment` i `documents` (sprzęty i ich pliki), `medicines`,
+`medicine_packs` i `medicine_log` (apteczka: leki, opakowania, dziennik podań), `users` i `sessions`
 (konta, w bazie tylko skróty haseł i tokenów), `categories`, `locations`, `barcode_cache`. Schemat aktualizuje się
 sam przy starcie – także ze starszej wersji, bez utraty danych. Zmiany ilości są wykonywane w transakcji z blokadą
 wiersza, więc kilka osób może jednocześnie zużywać i dokupować ten sam produkt bez gubienia zmian.
@@ -199,6 +205,7 @@ src/
   auth.js     – hasła, sesje, ciasteczka, limit prób logowania
   receipt.js  – odczyt pozycji z tekstu paragonu
   files.js    – przechowywanie dokumentów sprzętów
+  pharmacy.js – domowa apteka: leki, opakowania, podania, terminy po otwarciu
   cli.js      – narzędzia administracyjne (reset hasła, lista kont)
   products.js – podpowiedzi produktów po kodzie (Open Food Facts + cache)
   images.js   – pobieranie i przechowywanie zdjęć produktów
@@ -208,6 +215,7 @@ src/
 public/       – interfejs (HTML, CSS, JS bez frameworków) + manifest PWA i service worker
   scanner.js  – skanowanie kodów (BarcodeDetector / ZXing) i OCR dat (Tesseract.js)
   vendor/     – dołączona biblioteka ZXing (Apache-2.0)
+  fonts/      – fonty Inter i Plus Jakarta Sans (SIL OFL 1.1)
 ios/          – natywna aplikacja iOS (SwiftUI)
 test/         – testy API (node:test)
 data/         – zdjęcia produktów (ignorowane przez git)
@@ -249,6 +257,14 @@ tools/preview/ – podgląd w przeglądarce: serwer + PostgreSQL (PGlite) w jedn
 | POST | `/api/equipment/:id/documents?kind=warranty&name=plik.pdf` | Wysłanie pliku (treść żądania = plik) |
 | GET | `/api/documents/:id/file` | Pobranie dokumentu |
 | PATCH / DELETE | `/api/documents/:id` | Zmiana nazwy/rodzaju / usunięcie |
+| GET / POST | `/api/medicines` (`?q=gorączka&status=expired\|expiring\|low&person=Zosia`) | Leki w apteczce / nowy lek (opcjonalnie z `quantity` i `expires_at` pierwszego opakowania) |
+| GET / PUT / PATCH / DELETE | `/api/medicines/:id` | Lek z opakowaniami i historią |
+| POST | `/api/medicines/:id/packs` | Nowe opakowanie `{ "quantity": 20, "expires_at": "2027-05-01" }` |
+| PATCH / DELETE | `/api/medicine-packs/:id` | Zmiana ilości / terminu / daty otwarcia, utylizacja opakowania |
+| POST | `/api/medicines/:id/take` | Podanie leku `{ "amount": 5, "person": "Zosia", "note": "gorączka" }` |
+| POST | `/api/medicine-log/:id/undo` | Cofnięcie podania |
+| GET | `/api/medicines/journal` | Dziennik podań |
+| POST | `/api/medicines/dispose-expired` | Usunięcie wszystkich opakowań po terminie |
 | GET | `/api/auth/status` | Czy trzeba założyć pierwsze konto, kto jest zalogowany |
 | POST | `/api/auth/setup`, `/api/auth/login`, `/api/auth/logout` | Pierwsze konto / logowanie (zwraca `token`) / wylogowanie |
 | POST | `/api/auth/password` | Zmiana własnego hasła |
