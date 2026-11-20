@@ -112,7 +112,7 @@ test('wydatki i marnowanie w raportach', async () => {
 
 test('eksport i import zachowują partie', async () => {
   const exported = (await req('GET', '/api/export')).body;
-  assert.equal(exported.version, 3);
+  assert.equal(exported.version, 4);
   const before = (await req('GET', '/api/items')).body;
   const imp = await req('POST', '/api/import', exported);
   assert.equal(imp.status, 200);

@@ -3,7 +3,11 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
-const VIEWS = ['dashboard', 'items', 'shopping', 'equipment', 'expenses', 'settings'];
+const VIEWS = ['dashboard', 'items', 'pharmacy', 'shopping', 'equipment', 'expenses', 'settings'];
+const VIEW_TITLES = {
+  dashboard: 'Pulpit', items: 'Zasoby', pharmacy: 'Domowa apteka', shopping: 'Lista zakupów',
+  equipment: 'Sprzęty i dokumenty', expenses: 'Wydatki', settings: 'Ustawienia',
+};
 const state = { categories: [], locations: [], users: [], currentView: 'dashboard', user: null, months: 6 };
 
 // ---------- Narzędzia ----------
@@ -63,6 +67,36 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
 }
 
+/** Ikona z zestawu w index.html. */
+const icon = (name) => `<svg class="ico" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+
+/**
+ * Potwierdzenie w oknie aplikacji (zamiast confirm/prompt przeglądarki).
+ * Zwraca true/false, a z `input` – wpisany tekst albo null.
+ */
+function ask(text, { title = 'Na pewno?', ok = 'OK', danger = false, input = null, inputType = 'text' } = {}) {
+  const dlg = $('#confirm-dialog');
+  $('#confirm-title').textContent = title;
+  $('#confirm-text').textContent = text;
+  const field = $('#confirm-input');
+  field.hidden = input === null;
+  field.type = inputType;
+  field.value = typeof input === 'string' ? input : '';
+  const okBtn = $('#confirm-ok');
+  okBtn.textContent = ok;
+  okBtn.classList.toggle('danger', danger);
+  okBtn.classList.toggle('primary', !danger);
+  dlg.returnValue = '';
+  dlg.showModal();
+  if (input !== null) { field.focus(); field.select(); } else okBtn.focus();
+  return new Promise((resolve) => {
+    dlg.addEventListener('close', () => {
+      const confirmed = dlg.returnValue === 'ok';
+      resolve(input !== null ? (confirmed ? field.value : null) : confirmed);
+    }, { once: true });
+  });
+}
+
 function emptyLi(text) {
   return `<li class="empty-li">${esc(text)}</li>`;
 }
@@ -88,7 +122,14 @@ function applyLayout() {
 
 function showView(name) {
   state.currentView = name;
-  $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === name));
+  const narrow = matchMedia('(max-width: 900px)').matches;
+  const navView = narrow && ['equipment', 'expenses'].includes(name) ? 'settings' : name;
+  $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === navView));
+  $('#page-title').textContent = narrow && name === 'settings' ? 'Więcej' : VIEW_TITLES[name];
+  const date = new Date().toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' });
+  $('#page-eyebrow').textContent = date.charAt(0).toUpperCase() + date.slice(1);
+  document.body.dataset.view = name;
+  window.scrollTo({ top: 0 });
   $$('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${name}`));
   location.hash = name;
   refresh();
@@ -97,7 +138,7 @@ function showView(name) {
 function refresh() {
   if (!state.user) return Promise.resolve();
   const views = {
-    dashboard: loadDashboard, items: loadItems, shopping: loadShopping,
+    dashboard: loadDashboard, items: loadItems, pharmacy: loadPharmacy, shopping: loadShopping,
     equipment: loadEquipment, expenses: loadExpenses, settings: loadSettings,
   };
   updateShopBadge();
@@ -142,39 +183,81 @@ async function updateShopBadge() {
     };
     set('#shop-badge', stats.low_stock);
     set('#eq-badge', stats.warranty_ending + stats.service_due);
+    set('#eq-badge-hub', stats.warranty_ending + stats.service_due);
+    set('#med-badge', stats.med_expired + stats.med_expiring);
   } catch { /* licznik jest tylko podpowiedzią */ }
 }
 
 // ---------- Pulpit ----------
 
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 5) return 'Dobranoc';
+  if (h < 12) return 'Dzień dobry';
+  if (h < 18) return 'Miłego dnia';
+  return 'Dobry wieczór';
+}
+
+const plural = (n, one, few, many) => {
+  const n10 = n % 10;
+  const n100 = n % 100;
+  if (n === 1) return one;
+  if (n10 >= 2 && n10 <= 4 && (n100 < 12 || n100 > 14)) return few;
+  return many;
+};
+
 async function loadDashboard() {
-  const [stats, low, expiring, equipment] = await Promise.all([
-    api('/stats'), api('/items?status=low'), api('/items?status=expiring'), api('/equipment'),
+  const [stats, low, expiring, equipment, meds] = await Promise.all([
+    api('/stats'), api('/items?status=low'), api('/items?status=expiring'), api('/equipment'), api('/medicines'),
   ]);
 
+  // Powitanie i podsumowanie dnia.
+  $('#hero-greet').textContent = `${greeting()}, ${state.user?.name ?? ''}`.replace(/, $/, '');
+  const notes = [];
+  if (stats.expired) notes.push(`<strong>${stats.expired}</strong> ${plural(stats.expired, 'produkt jest', 'produkty są', 'produktów jest')} po terminie`);
+  if (stats.expiring_soon) notes.push(`<strong>${stats.expiring_soon}</strong> ${plural(stats.expiring_soon, 'traci', 'tracą', 'traci')} ważność w tym tygodniu`);
+  if (stats.low_stock) notes.push(`<strong>${stats.low_stock}</strong> ${plural(stats.low_stock, 'pozycja', 'pozycje', 'pozycji')} do kupienia`);
+  if (stats.med_expired) notes.push(`<strong>${stats.med_expired}</strong> ${plural(stats.med_expired, 'lek', 'leki', 'leków')} po terminie`);
+  $('#hero-sub').innerHTML = notes.length
+    ? `${notes.slice(0, 3).join(' · ')}.`
+    : 'Wszystko pod kontrolą – zapasy uzupełnione, terminy w porządku.';
+
+  const tile = ({ label, value, cls = '', ico, view }) => {
+    const inner = `<span class="s-ico">${icon(ico)}</span><span class="label">${label}</span><span class="value">${value}</span>`;
+    return view
+      ? `<button type="button" class="stat ${cls}" data-goto="${view}">${inner}</button>`
+      : `<div class="stat ${cls}">${inner}</div>`;
+  };
   $('#stats').innerHTML = [
-    ['Wszystkie zasoby', stats.total_items, ''],
-    ['Wartość zapasów', fmtMoney(stats.total_value), ''],
-    ['Niski stan', stats.low_stock, stats.low_stock ? 'warn' : ''],
-    ['Wkrótce tracą ważność', stats.expiring_soon, stats.expiring_soon ? 'warn' : ''],
-    ['Przeterminowane', stats.expired, stats.expired ? 'danger' : ''],
-    ['Wydatki w tym miesiącu', fmtMoney(stats.spent_month), '', 'expenses'],
-    ['Zmarnowane w tym miesiącu', fmtMoney(stats.wasted_month), stats.wasted_month ? 'warn' : '', 'expenses'],
-  ].map(([label, value, cls, view]) => view
-    ? `<button type="button" class="stat ${cls}" data-goto="${view}"><div class="label">${label}</div><div class="value">${value}</div></button>`
-    : `<div class="stat ${cls}"><div class="label">${label}</div><div class="value">${value}</div></div>`).join('');
+    { label: 'Zasoby w domu', value: stats.total_items, cls: 'c-primary', ico: 'box', view: 'items' },
+    { label: 'Wartość zapasów', value: fmtMoney(stats.total_value), cls: 'c-ok', ico: 'tag' },
+    { label: 'Do kupienia', value: stats.low_stock, cls: stats.low_stock ? 'warn' : '', ico: 'cart', view: 'shopping' },
+    { label: 'Ważne ≤ 7 dni', value: stats.expiring_soon, cls: stats.expiring_soon ? 'warn' : '', ico: 'clock', view: 'items' },
+    { label: 'Przeterminowane', value: stats.expired, cls: stats.expired ? 'danger' : '', ico: 'alert', view: 'items' },
+    { label: 'Leki w apteczce', value: stats.medicines, cls: stats.med_expired ? 'danger' : 'c-med', ico: 'pill', view: 'pharmacy' },
+    { label: 'Wydatki w tym miesiącu', value: fmtMoney(stats.spent_month), cls: 'c-sky', ico: 'receipt', view: 'expenses' },
+    { label: 'Zmarnowane w tym mies.', value: fmtMoney(stats.wasted_month), cls: stats.wasted_month ? 'warn' : '', ico: 'trash', view: 'expenses' },
+  ].map(tile).join('');
 
   const alerts = equipmentAlerts(equipment);
   $('#dash-eq-card').hidden = !alerts.length;
   $('#dash-eq').innerHTML = alerts.map((a) => `<li data-eq-id="${a.id}" class="clickable"><span>${esc(a.name)}</span>${a.badge}</li>`).join('');
 
+  const medAlerts = meds.filter((m) => m.has_expired || m.expiring || (m.low && m.min_quantity > 0));
+  $('#dash-med-card').hidden = !meds.length;
+  $('#dash-med').innerHTML = medAlerts.length
+    ? medAlerts.slice(0, 6).map((m) => `<li data-med-id="${m.id}" class="clickable">
+        <span class="li-main"><span class="med-ico ${formIcon(m.form).cls}" style="width:32px;height:32px;border-radius:10px">${icon(formIcon(m.form).ico)}</span><span>${esc(m.name)}</span></span>
+        ${medStatusBadge(m)}</li>`).join('')
+    : emptyLi('Apteczka w porządku – żadnych leków po terminie');
+
   $('#dash-low').innerHTML = low.length
-    ? low.map((i) => `<li><span>${esc(i.name)}</span><span class="badge warn">${fmtNum(i.quantity)} / min ${fmtNum(i.min_quantity)} ${esc(i.unit)}</span></li>`).join('')
-    : emptyLi('Wszystkie zapasy na odpowiednim poziomie 👍');
+    ? low.map((i) => `<li><span class="li-main">${thumb(i)}<span>${esc(i.name)}</span></span><span class="badge warn">${fmtNum(i.quantity)} / min ${fmtNum(i.min_quantity)} ${esc(i.unit)}</span></li>`).join('')
+    : emptyLi('Wszystkie zapasy na odpowiednim poziomie');
 
   $('#dash-expiring').innerHTML = expiring.length
     ? expiring.sort((a, b) => a.expires_at.localeCompare(b.expires_at))
-      .map((i) => `<li><span>${esc(i.name)}</span><span>${expiryBadge(i.expires_at)}</span></li>`).join('')
+      .map((i) => `<li><span class="li-main">${thumb(i)}<span>${esc(i.name)}</span></span><span>${expiryBadge(i.expires_at)}</span></li>`).join('')
     : emptyLi('Brak produktów z bliskim terminem ważności');
 
   const max = Math.max(1, ...stats.by_category.map((c) => c.count));
@@ -186,6 +269,349 @@ async function loadDashboard() {
           <span class="count">${c.count}</span>
         </div>`).join('')
     : '<p class="muted">Dodaj pierwszy zasób w zakładce „Zasoby”.</p>';
+}
+
+// ---------- Domowa apteka ----------
+
+const pharm = { filter: '', person: '', list: [], suggestions: { persons: [], kits: [], forms: [] }, current: null, takeId: null };
+
+/** Ikona i kolor zależnie od postaci leku. */
+function formIcon(form = '') {
+  const f = form.toLowerCase();
+  if (/syrop|zawies|płyn|plyn|roztw/.test(f)) return { ico: 'bottle', cls: 'f-bottle' };
+  if (/krop/.test(f)) return { ico: 'drop', cls: 'f-drop' };
+  if (/maś|mas|krem|żel|zel/.test(f)) return { ico: 'tube', cls: 'f-tube' };
+  if (/aerozol|spray|inhal/.test(f)) return { ico: 'spray', cls: 'f-spray' };
+  if (/plast|opatr|banda/.test(f)) return { ico: 'bandage', cls: 'f-bandage' };
+  return { ico: 'pill', cls: '' };
+}
+
+function medStatusBadge(m) {
+  if (m.has_expired) return `<span class="badge danger">${m.quantity > 0 ? 'część po terminie' : 'po terminie'}</span>`;
+  if (m.expiring) {
+    const d = daysUntil(m.next_deadline);
+    return `<span class="badge warn">${d === 0 ? 'ważny do dziś' : `ważny ${d} d.`}</span>`;
+  }
+  if (m.quantity <= 0) return '<span class="badge">brak</span>';
+  if (m.low) return '<span class="badge warn">mało</span>';
+  return '';
+}
+
+/** „dziś 14:05”, „wczoraj 9:30”, „12.11 18:00” + ile godzin temu. */
+function whenTaken(ts) {
+  const d = new Date(`${String(ts).replace(' ', 'T')}Z`);
+  const mins = Math.round((Date.now() - d) / 60000);
+  const time = d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+  const dayDiff = Math.round((new Date(new Date().toDateString()) - new Date(d.toDateString())) / 86400000);
+  const day = dayDiff === 0 ? 'dziś' : dayDiff === 1 ? 'wczoraj' : d.toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' });
+  const ago = mins < 60 ? `${Math.max(mins, 1)} min temu` : mins < 48 * 60 ? `${Math.round(mins / 60)} h temu` : '';
+  return { label: `${day} ${time}`, ago, mins };
+}
+
+async function loadPharmacy() {
+  const params = new URLSearchParams();
+  const q = $('#med-q').value.trim();
+  if (q) params.set('q', q);
+  if (pharm.person) params.set('person', pharm.person);
+  const [all, list, sug] = await Promise.all([
+    api('/medicines'),
+    api(`/medicines?${params}${pharm.filter ? `&status=${pharm.filter}` : ''}`),
+    api('/medicines/suggestions'),
+  ]);
+  pharm.list = list;
+  pharm.suggestions = sug;
+  $('#med-persons').innerHTML = sug.persons.map((p) => `<option value="${esc(p)}">`).join('');
+  $('#med-kits').innerHTML = sug.kits.map((k) => `<option value="${esc(k)}">`).join('');
+
+  // Pasek: przeterminowane do oddania w aptece.
+  const expired = all.filter((m) => m.has_expired);
+  $('#med-expired-banner').hidden = !expired.length;
+  $('#med-expired-title').textContent = expired.length
+    ? `${expired.length} ${plural(expired.length, 'lek', 'leki', 'leków')} po terminie: ${expired.slice(0, 3).map((m) => m.name).join(', ')}${expired.length > 3 ? '…' : ''}`
+    : '';
+
+  const count = (fn) => all.filter(fn).length;
+  const chip = (value, label, n, cls = '') =>
+    `<button type="button" class="chip-btn ${cls}" data-med-filter="${value}" aria-pressed="${pharm.filter === value}">${cls ? '<span class="chip-dot"></span>' : ''}${label}${n != null ? ` <span class="chip-count">${n}</span>` : ''}</button>`;
+  const persons = [...new Set(all.map((m) => m.person).filter(Boolean))];
+  $('#med-filters').innerHTML = [
+    chip('', 'Wszystkie', all.length),
+    count((m) => m.has_expired) ? chip('expired', 'Po terminie', count((m) => m.has_expired), 'c-danger') : '',
+    count((m) => m.expiring) ? chip('expiring', 'Kończy się termin', count((m) => m.expiring), 'c-warn') : '',
+    count((m) => m.low) ? chip('low', 'Mało / brak', count((m) => m.low), 'c-warn') : '',
+    ...persons.map((p) => `<button type="button" class="chip-btn" data-med-person="${esc(p)}" aria-pressed="${pharm.person === p}">${icon('user')}${esc(p)}</button>`),
+  ].join('');
+
+  $('#med-empty').hidden = list.length > 0;
+  $('#med-empty-text').textContent = all.length
+    ? 'Żaden lek nie pasuje do wyszukiwania.'
+    : 'Dodaj leki, które masz w domu – aplikacja przypomni o terminach, podpowie, co podać na gorączkę czy ból głowy, i zapamięta, kto co dostał.';
+  $('#med-list').innerHTML = list.map(medCard).join('');
+}
+
+function medCard(m) {
+  const f = formIcon(m.form);
+  const tags = m.purpose.split(/[,;]+/).map((t) => t.trim()).filter(Boolean).slice(0, 4);
+  const last = m.last_taken ? whenTaken(m.last_taken.created_at) : null;
+  const cls = m.has_expired ? 'expired' : m.expiring ? 'expiring' : m.quantity <= 0 ? 'empty' : '';
+  return `
+    <article class="med-card ${cls}" data-med-id="${m.id}" tabindex="0">
+      <div class="med-top">
+        <span class="med-ico ${f.cls}">${icon(f.ico)}</span>
+        <div class="med-title">
+          <h3>${esc(m.name)}${m.prescription ? '<span class="rx" title="Lek na receptę">Rx</span>' : ''}</h3>
+          <div class="med-sub">${esc([m.strength, m.form, m.substance && m.substance.toLowerCase() !== m.name.toLowerCase() ? m.substance : ''].filter(Boolean).join(' · ') || ' ')}</div>
+        </div>
+        ${medStatusBadge(m)}
+      </div>
+      ${tags.length ? `<div class="med-tags">${tags.map((t) => `<span class="med-tag">${esc(t)}</span>`).join('')}</div>` : ''}
+      <div class="med-meta">
+        ${m.person ? `<span>${icon('user')}${esc(m.person)}</span>` : ''}
+        ${m.kit ? `<span>${icon('pin')}${esc(m.kit)}</span>` : ''}
+        ${m.next_deadline ? `<span>${icon('clock')}do ${fmtDate(m.next_deadline)}</span>` : ''}
+      </div>
+      ${last ? `<div class="med-last">${icon('history')}Ostatnio: ${last.label}${last.ago ? ` (${last.ago})` : ''}${m.last_taken.person ? ` · ${esc(m.last_taken.person)}` : ''}</div>` : ''}
+      <div class="med-foot">
+        <span class="med-qty"><strong>${fmtNum(m.quantity)} ${esc(m.unit)}</strong><span>${m.packs.filter((p) => !p.expired).length} ${plural(m.packs.filter((p) => !p.expired).length, 'opakowanie', 'opakowania', 'opakowań')}${m.opened ? ' · otwarte' : ''}</span></span>
+        <button type="button" class="btn sm primary med" data-med-take="${m.id}" ${m.quantity > 0 ? '' : 'disabled'}>${icon('check')}Podaj</button>
+      </div>
+    </article>`;
+}
+
+function openMedicine(med = null, prefill = {}) {
+  const form = $('#med-form');
+  form.reset();
+  $('#med-error').hidden = true;
+  pharm.current = med;
+  const values = med ?? { unit: 'tabl.', min_quantity: 0, ...prefill };
+  for (const el of form.elements) {
+    if (!el.name || !(el.name in values)) continue;
+    if (el.type === 'checkbox') el.checked = Boolean(values[el.name]);
+    else el.value = values[el.name] ?? '';
+  }
+  form.elements.id.value = med?.id ?? '';
+  $('#med-dialog-title').textContent = med ? med.name : 'Nowy lek';
+  const f = formIcon(values.form);
+  $('#med-form-ico').className = `med-ico lg ${f.cls}`;
+  $('#med-form-ico').innerHTML = icon(f.ico);
+  $('#med-first').hidden = Boolean(med);
+  $('#med-delete').hidden = !med;
+  renderPacks(med);
+  $('#med-dialog').showModal();
+  if (!med) form.elements.name.focus();
+}
+
+function renderPacks(med) {
+  $('#med-packs').hidden = !med;
+  $('#med-log-box').hidden = !med?.log?.length;
+  if (!med) return;
+  $('#med-packs-sum').textContent = `do użycia: ${fmtNum(med.quantity)} ${med.unit}${med.expired_quantity ? ` · po terminie: ${fmtNum(med.expired_quantity)}` : ''}`;
+  $('#med-pack-list').innerHTML = med.packs.length
+    ? med.packs.map((p) => `
+      <li data-pack="${p.id}" class="${p.expired ? 'danger' : p.expiring ? 'warn' : ''}">
+        <label>Ilość<input type="number" min="0" step="any" value="${p.quantity}" data-pf="quantity" aria-label="Ilość"></label>
+        <label>Ważne do<input type="date" value="${p.expires_at ?? ''}" data-pf="expires_at"></label>
+        <label>Otwarte<input type="date" value="${p.opened_at ?? ''}" data-pf="opened_at"></label>
+        <button type="button" class="btn sm danger" data-pack-del title="Utylizuj opakowanie">${icon('trash')}</button>
+        <span class="pack-info">${p.deadline ? `termin: <strong>${fmtDate(p.deadline)}</strong>` : 'bez terminu'}
+          ${p.opened_at && med.after_opening_days && p.deadline !== p.expires_at ? `<span class="badge">${med.after_opening_days} dni po otwarciu</span>` : ''}
+          ${p.expired ? '<span class="badge danger">po terminie – oddaj w aptece</span>' : p.expiring ? '<span class="badge warn">kończy się termin</span>' : ''}</span>
+      </li>`).join('')
+    : `<li class="muted small" style="border:0;display:block">Brak opakowań – dodaj nowe poniżej.</li>`;
+  const LOG = { added: ['plus', 'Dodano'], taken: ['check', 'Podano'], disposed: ['trash', 'Zutylizowano'], correction: ['edit', 'Korekta'] };
+  $('#med-log').innerHTML = (med.log ?? []).slice(0, 12).map((l) => `
+    <li data-log="${l.id}">
+      <span class="li-main">${icon(LOG[l.reason]?.[0] ?? 'edit')}<span>${LOG[l.reason]?.[1] ?? l.reason}${l.person ? ` · ${esc(l.person)}` : ''}${l.note ? ` · <span class="muted">${esc(l.note)}</span>` : ''}
+        <span class="li-sub">${fmtTime(l.created_at)}${l.user_name ? ` · ${esc(l.user_name)}` : ''}</span></span></span>
+      <span class="row nowrap"><strong class="${l.delta > 0 ? 'delta-pos' : ''}">${l.delta > 0 ? '+' : ''}${fmtNum(l.delta)} ${esc(med.unit)}</strong>
+      ${l.reason === 'taken' ? `<button type="button" class="btn sm" data-log-undo="${l.id}">Cofnij</button>` : ''}</span>
+    </li>`).join('');
+}
+
+async function medApi(path, opts) {
+  try {
+    const med = await api(path, opts);
+    pharm.current = med;
+    renderPacks(med);
+    loadPharmacy().catch(() => {});
+    updateShopBadge();
+    return med;
+  } catch (err) {
+    toast(err.message);
+    return null;
+  }
+}
+
+async function saveMedicine(e) {
+  e.preventDefault();
+  const form = e.target;
+  const data = Object.fromEntries(new FormData(form));
+  const { id } = data;
+  delete data.id;
+  data.prescription = form.elements.prescription.checked;
+  data.after_opening_days = data.after_opening_days || null;
+  if (id) {
+    delete data.quantity;
+    delete data.expires_at;
+  } else if (!data.quantity) {
+    delete data.quantity;
+    delete data.expires_at;
+  }
+  try {
+    await api(id ? `/medicines/${id}` : '/medicines', { method: id ? 'PUT' : 'POST', body: data });
+    $('#med-dialog').close();
+    toast(id ? 'Zapisano zmiany' : `Dodano do apteczki: ${data.name}`);
+    refresh();
+  } catch (err) {
+    $('#med-error').textContent = err.message;
+    $('#med-error').hidden = false;
+  }
+}
+
+async function deleteMedicine() {
+  const med = pharm.current;
+  if (!med) return;
+  if (!(await ask('Lek zniknie z apteczki razem z historią podań.', { title: `Usunąć „${med.name}”?`, ok: 'Usuń', danger: true }))) return;
+  try {
+    await api(`/medicines/${med.id}`, { method: 'DELETE' });
+    $('#med-dialog').close();
+    toast('Usunięto lek');
+    refresh();
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+async function onPackChange(e) {
+  const input = e.target.closest('[data-pf]');
+  if (!input) return;
+  const id = input.closest('[data-pack]').dataset.pack;
+  const value = input.dataset.pf === 'quantity' ? Number(input.value) : (input.value || null);
+  await medApi(`/medicine-packs/${id}`, { method: 'PATCH', body: { [input.dataset.pf]: value } });
+}
+
+async function onPackClick(e) {
+  const del = e.target.closest('[data-pack-del]');
+  if (del) {
+    if (!(await ask('Przeterminowane i niepotrzebne leki oddaj w aptece – nie wyrzucaj ich do kosza.', { title: 'Usunąć opakowanie z apteczki?', ok: 'Usuń', danger: true }))) return;
+    await medApi(`/medicine-packs/${del.closest('[data-pack]').dataset.pack}`, { method: 'DELETE' });
+  }
+}
+
+async function addPack() {
+  if (!pharm.current) return;
+  const qty = Number($('#pack-add-qty').value);
+  if (!(qty > 0)) return toast('Podaj ilość w nowym opakowaniu');
+  const med = await medApi(`/medicines/${pharm.current.id}/packs`, {
+    method: 'POST', body: { quantity: qty, expires_at: $('#pack-add-date').value || null },
+  });
+  if (med) {
+    $('#pack-add-qty').value = '';
+    $('#pack-add-date').value = '';
+    toast('Dodano opakowanie');
+  }
+}
+
+async function undoMedLog(id) {
+  const med = await medApi(`/medicine-log/${id}/undo`, { method: 'POST' });
+  if (med) toast('Cofnięto podanie');
+}
+
+async function openTake(id) {
+  const med = await api(`/medicines/${id}`);
+  pharm.takeId = med.id;
+  const form = $('#take-form');
+  form.reset();
+  $('#take-error').hidden = true;
+  const f = formIcon(med.form);
+  $('#take-ico').className = `med-ico lg ${f.cls}`;
+  $('#take-ico').innerHTML = icon(f.ico);
+  $('#take-title').textContent = `Podaj: ${med.name}`;
+  $('#take-sub').textContent = `Zostało ${fmtNum(med.quantity)} ${med.unit}${med.strength ? ` · ${med.strength}` : ''}`;
+  $('#take-unit').textContent = med.unit;
+  form.elements.amount.value = med.unit === 'ml' ? 5 : 1;
+  form.elements.person.value = med.person && !/wszy|dorośli|dzieci/i.test(med.person) ? med.person : '';
+  $('#take-dosage').hidden = !med.dosage;
+  $('#take-dosage').innerHTML = med.dosage ? `<strong>Dawkowanie:</strong> ${esc(med.dosage)}` : '';
+  const last = med.last_taken;
+  const lastBox = $('#take-last');
+  lastBox.hidden = !last;
+  if (last) {
+    const w = whenTaken(last.created_at);
+    lastBox.classList.toggle('recent', w.mins < 4 * 60);
+    lastBox.innerHTML = `${icon('clock')}<span>Ostatnio podano <strong>${w.label}</strong>${w.ago ? ` (${w.ago})` : ''}: ${fmtNum(last.amount)} ${esc(med.unit)}${last.person ? ` – ${esc(last.person)}` : ''}${last.user_name ? ` <span class="muted">· zapisał(a) ${esc(last.user_name)}</span>` : ''}.${w.mins < 4 * 60 ? ' Sprawdź odstęp między dawkami.' : ''}</span>`;
+  }
+  const persons = [...new Set([...pharm.suggestions.persons, ...state.users.map((u) => u.name)])].slice(0, 8);
+  $('#take-persons').innerHTML = persons.map((p) => `<button type="button" class="chip-btn" data-take-person="${esc(p)}" aria-pressed="${form.elements.person.value === p}">${esc(p)}</button>`).join('');
+  $('#take-dialog').showModal();
+}
+
+async function saveTake(e) {
+  e.preventDefault();
+  const data = Object.fromEntries(new FormData(e.target));
+  try {
+    const med = await api(`/medicines/${pharm.takeId}/take`, { method: 'POST', body: { amount: Number(data.amount), person: data.person, note: data.note } });
+    $('#take-dialog').close();
+    toast(`Zapisano: ${med.name}, ${fmtNum(Number(data.amount))} ${med.unit}${data.person ? ` – ${data.person}` : ''}`);
+    refresh();
+  } catch (err) {
+    $('#take-error').textContent = err.message;
+    $('#take-error').hidden = false;
+  }
+}
+
+async function openJournal() {
+  const rows = await api('/medicines/journal?limit=60');
+  $('#journal-list').innerHTML = rows.length
+    ? rows.map((r) => {
+      const w = whenTaken(r.created_at);
+      return `<li data-log="${r.id}">
+        <span class="li-main"><span class="med-ico" style="width:34px;height:34px;border-radius:11px">${icon('pill')}</span>
+          <span><strong>${esc(r.name)}</strong> · ${fmtNum(r.amount)} ${esc(r.unit)}${r.person ? ` – ${esc(r.person)}` : ''}
+          <span class="li-sub">${r.note ? `${esc(r.note)} · ` : ''}${r.user_name ? `zapisał(a) ${esc(r.user_name)}` : ''}</span></span></span>
+        <span class="j-time">${w.label}${w.ago ? `<br>${w.ago}` : ''}</span>
+      </li>`;
+    }).join('')
+    : emptyLi('Jeszcze nikt nie dostał leku – podania zapisujesz przyciskiem „Podaj”.');
+  $('#journal-dialog').showModal();
+}
+
+async function disposeExpired() {
+  if (!(await ask('Opakowania po terminie znikną z apteczki. Same leki oddaj w aptece do pojemnika na przeterminowane leki.', { title: 'Usunąć przeterminowane opakowania?', ok: 'Usuń z apteczki', danger: true }))) return;
+  try {
+    const res = await api('/medicines/dispose-expired', { method: 'POST' });
+    toast(`Usunięto ${res.packs} ${plural(res.packs, 'opakowanie', 'opakowania', 'opakowań')}`);
+    refresh();
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+/** Skan kodu w aptece: znany lek → okno leku, nowy → formularz z kodem. */
+async function scanMedicine() {
+  const code = await Scanner.scanBarcode();
+  if (!code) return;
+  const found = (await api(`/medicines?q=${encodeURIComponent(code)}`)).filter((m) => m.barcode === code);
+  if (found.length) openMedicine(await api(`/medicines/${found[0].id}`));
+  else openMedicine(null, { barcode: code });
+}
+
+// ---------- Motyw ----------
+
+function getTheme() {
+  try { return localStorage.getItem('hm-theme') || 'system'; } catch { return 'system'; }
+}
+function setTheme(theme) {
+  try { localStorage.setItem('hm-theme', theme); } catch { /* tryb prywatny */ }
+  applyTheme();
+}
+function applyTheme() {
+  const t = getTheme();
+  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+  else delete document.documentElement.dataset.theme;
+  const dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  $('#theme-btn').innerHTML = icon(dark ? 'sun' : 'moon');
+  $$('[data-theme-set]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.themeSet === t)));
 }
 
 // ---------- Zasoby ----------
@@ -379,12 +805,12 @@ function onBatchChange(e) {
   batchApi(`/batches/${id}`, { method: 'PATCH', body: { [input.dataset.bf]: value } });
 }
 
-function onBatchClick(e) {
+async function onBatchClick(e) {
   const btn = e.target.closest('[data-bact]');
   if (!btn) return;
   const id = btn.closest('[data-batch]').dataset.batch;
   const reason = btn.dataset.bact;
-  if (reason === 'wasted' && !confirm('Wyrzucić całą partię? Trafi do statystyki zmarnowanych.')) return;
+  if (reason === 'wasted' && !(await ask('Partia trafi do statystyki zmarnowanych.', { title: 'Wyrzucić całą partię?', ok: 'Wyrzuć', danger: true }))) return;
   batchApi(`/batches/${id}?reason=${reason}`, { method: 'DELETE' });
 }
 
@@ -421,7 +847,7 @@ async function deleteFromForm() {
   const id = $('#item-form').elements.id.value;
   if (!id) return;
   const name = $('#item-form').elements.name.value;
-  if (!confirm(`Usunąć „${name}”?`)) return;
+  if (!(await ask('Produkt zniknie razem z historią.', { title: `Usunąć „${name}”?`, ok: 'Usuń', danger: true }))) return;
   try {
     await api(`/items/${id}`, { method: 'DELETE' });
     $('#item-dialog').close();
@@ -489,7 +915,7 @@ async function onItemAction(e) {
       $('#history-dialog').showModal();
     } else if (act === 'delete') {
       const name = btn.closest('[data-id]').querySelector('.item-name').textContent;
-      if (!confirm(`Usunąć „${name}”?`)) return;
+      if (!(await ask('Produkt zniknie razem z historią.', { title: `Usunąć „${name}”?`, ok: 'Usuń', danger: true }))) return;
       await api(`/items/${id}`, { method: 'DELETE' });
       toast('Usunięto zasób');
       refresh();
@@ -637,7 +1063,7 @@ async function copyShopping() {
     await navigator.clipboard.writeText(text);
     toast('Skopiowano do schowka');
   } catch {
-    prompt('Skopiuj listę:', text);
+    await ask('Zaznacz i skopiuj tekst poniżej.', { title: 'Lista zakupów', input: text, ok: 'Zamknij' });
   }
 }
 
@@ -674,7 +1100,7 @@ async function onDictSubmit(e) {
 async function onDictDelete(e) {
   const btn = e.target.closest('button[data-del-dict]');
   if (!btn) return;
-  if (!confirm(`Usunąć „${btn.dataset.name}”? Powiązane zasoby pozostaną bez przypisania.`)) return;
+  if (!(await ask('Powiązane zasoby pozostaną bez przypisania.', { title: `Usunąć „${btn.dataset.name}”?`, ok: 'Usuń', danger: true }))) return;
   try {
     await api(`/${btn.dataset.delDict}/${btn.dataset.id}`, { method: 'DELETE' });
     toast('Usunięto');
@@ -698,11 +1124,11 @@ async function importData(e) {
   const file = e.target.files[0];
   e.target.value = '';
   if (!file) return;
-  if (!confirm('Import zastąpi wszystkie bieżące dane. Kontynuować?')) return;
+  if (!(await ask('Zapasy i apteczka zostaną zastąpione danymi z pliku.', { title: 'Zaimportować kopię?', ok: 'Importuj', danger: true }))) return;
   try {
     const data = JSON.parse(await file.text());
     const res = await api('/import', { method: 'POST', body: data });
-    toast(`Zaimportowano ${res.items} zasobów`);
+    toast(`Zaimportowano ${res.items} zasobów${res.medicines != null ? ` i ${res.medicines} leków` : ''}`);
     loadSettings();
   } catch (err) {
     toast(`Import nieudany: ${err.message}`);
@@ -928,12 +1354,12 @@ async function loadExpenses() {
   const rep = await api(`/reports?months=${state.months}`);
   const avg = rep.totals.spent / rep.months;
   $('#exp-stats').innerHTML = [
-    [`Wydatki (${rep.months} mies.)`, fmtMoney(rep.totals.spent), ''],
-    ['Średnio miesięcznie', fmtMoney(avg), ''],
-    ['Zmarnowane', fmtMoney(rep.totals.wasted), rep.totals.wasted ? 'warn' : ''],
-    ['Wyrzucone razy', rep.totals.wasted_count, rep.totals.wasted_count ? 'warn' : ''],
-    ['Zakup sprzętów', fmtMoney(rep.totals.equipment), ''],
-  ].map(([l, v, c]) => `<div class="stat ${c}"><div class="label">${l}</div><div class="value">${v}</div></div>`).join('');
+    [`Wydatki (${rep.months} mies.)`, fmtMoney(rep.totals.spent), 'c-primary', 'receipt'],
+    ['Średnio miesięcznie', fmtMoney(avg), 'c-sky', 'chart'],
+    ['Zmarnowane', fmtMoney(rep.totals.wasted), rep.totals.wasted ? 'warn' : 'c-ok', 'trash'],
+    ['Wyrzucone razy', rep.totals.wasted_count, rep.totals.wasted_count ? 'warn' : 'c-ok', 'alert'],
+    ['Zakup sprzętów', fmtMoney(rep.totals.equipment), '', 'wrench'],
+  ].map(([l, v, c, ico]) => `<div class="stat ${c}"><span class="s-ico">${icon(ico)}</span><span class="label">${l}</span><span class="value">${v}</span></div>`).join('');
 
   columnChart($('#chart-spent'), rep.monthly, 'spent', 'Wydatki na zakupy');
   columnChart($('#chart-wasted'), rep.monthly, 'wasted', 'Zmarnowane');
@@ -1105,7 +1531,7 @@ async function uploadDocs(e) {
 async function onDocClick(e) {
   const btn = e.target.closest('[data-doc-del]');
   if (!btn) return;
-  if (!confirm('Usunąć ten dokument?')) return;
+  if (!(await ask('Plik zostanie usunięty z serwera.', { title: 'Usunąć dokument?', ok: 'Usuń', danger: true }))) return;
   const id = btn.closest('[data-doc]').dataset.doc;
   try {
     await api(`/documents/${id}`, { method: 'DELETE' });
@@ -1118,7 +1544,7 @@ async function onDocClick(e) {
 
 async function deleteEquipment() {
   const form = $('#eq-form');
-  if (!confirm(`Usunąć „${form.elements.name.value}” razem z dokumentami?`)) return;
+  if (!(await ask('Sprzęt zostanie usunięty razem ze wszystkimi dokumentami.', { title: `Usunąć „${form.elements.name.value}”?`, ok: 'Usuń', danger: true }))) return;
   try {
     await api(`/equipment/${form.elements.id.value}`, { method: 'DELETE' });
     $('#eq-dialog').close();
@@ -1168,8 +1594,12 @@ function setUser(user) {
   document.body.classList.remove('locked');
   document.body.classList.toggle('is-admin', user.role === 'admin');
   $('#auth-screen').hidden = true;
+  const initials = user.name.trim().split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
   $('#user-chip').hidden = false;
-  $('#user-chip').textContent = `👤 ${user.name}`;
+  $('#user-chip').innerHTML = `<span class="avatar" aria-hidden="true">${esc(initials)}</span>
+    <span class="uc-text"><strong>${esc(user.name)}</strong><span>${user.role === 'admin' ? 'Administrator' : 'Domownik'}</span></span>${icon('chevron')}`;
+  $('#avatar-btn').hidden = false;
+  $('#avatar-btn').textContent = initials;
 }
 
 async function submitAuth(e) {
@@ -1228,7 +1658,7 @@ async function onUserAction(e) {
   const u = state.users.find((x) => String(x.id) === id);
   try {
     if (btn.dataset.userAct === 'password') {
-      const password = prompt(`Nowe hasło dla ${u.name} (min. 8 znaków):`);
+      const password = await ask('Minimum 8 znaków. Przekaż je domownikowi.', { title: `Nowe hasło dla ${u.name}`, input: '', inputType: 'password', ok: 'Ustaw hasło' });
       if (!password) return;
       await api(`/users/${id}`, { method: 'PATCH', body: { password } });
       toast(`Zmieniono hasło – ${u.name} musi zalogować się ponownie`);
@@ -1236,7 +1666,7 @@ async function onUserAction(e) {
       await api(`/users/${id}`, { method: 'PATCH', body: { role: u.role === 'admin' ? 'member' : 'admin' } });
       toast('Zmieniono uprawnienia');
     } else {
-      if (!confirm(`Usunąć konto ${u.name}? Historia zmian zostanie, bez nazwiska.`)) return;
+      if (!(await ask('Historia zmian zostanie, bez imienia.', { title: `Usunąć konto ${u.name}?`, ok: 'Usuń', danger: true }))) return;
       await api(`/users/${id}`, { method: 'DELETE' });
       toast('Usunięto konto');
     }
@@ -1360,10 +1790,6 @@ function bindEvents() {
     state.months = Number(b.dataset.months);
     loadExpenses().catch((e) => toast(e.message));
   }));
-  on('#stats', 'click', (e) => {
-    const b = e.target.closest('[data-goto]');
-    if (b) showView(b.dataset.goto);
-  });
 
   // Sprzęty
   on('#btn-add-eq', 'click', () => openEquipment());
@@ -1382,10 +1808,106 @@ function bindEvents() {
   on('#eq-doc-list', 'click', onDocClick);
   on('#eq-warranty-years', 'change', setWarrantyYears);
 
+  // Apteka
+  on('#btn-med-add', 'click', () => openMedicine());
+  on('#btn-med-scan', 'click', () => scanMedicine().catch((e) => toast(e.message)));
+  on('#btn-med-journal', 'click', () => openJournal().catch((e) => toast(e.message)));
+  on('#btn-med-dispose', 'click', disposeExpired);
+  on('#med-q', 'input', debounce(() => loadPharmacy().catch((e) => toast(e.message)), 250));
+  on('#med-filters', 'click', (e) => {
+    const f = e.target.closest('[data-med-filter]');
+    const p = e.target.closest('[data-med-person]');
+    if (f) { pharm.filter = f.dataset.medFilter; pharm.person = ''; }
+    else if (p) pharm.person = pharm.person === p.dataset.medPerson ? '' : p.dataset.medPerson;
+    else return;
+    loadPharmacy().catch((err) => toast(err.message));
+  });
+  const onMedList = (e) => {
+    const take = e.target.closest('[data-med-take]');
+    if (take) return openTake(take.dataset.medTake).catch((err) => toast(err.message));
+    const card = e.target.closest('[data-med-id]');
+    if (card) api(`/medicines/${card.dataset.medId}`).then((m) => openMedicine(m)).catch((err) => toast(err.message));
+  };
+  on('#med-list', 'click', onMedList);
+  on('#med-list', 'keydown', (e) => { if (e.key === 'Enter' && e.target.matches('.med-card')) onMedList(e); });
+  on('#dash-med', 'click', onMedList);
+  on('#med-form', 'submit', saveMedicine);
+  on('#med-form', 'input', (e) => {
+    if (e.target.name !== 'form') return;
+    const f = formIcon(e.target.value);
+    $('#med-form-ico').className = `med-ico lg ${f.cls}`;
+    $('#med-form-ico').innerHTML = icon(f.ico);
+    const unit = e.target.form.elements.unit;
+    if (!pharm.current && ['tabl.', 'ml', 'kaps.', 'szt.', 'g', ''].includes(unit.value)) {
+      unit.value = f.ico === 'bottle' || f.ico === 'drop' ? 'ml' : f.ico === 'tube' ? 'g' : /kaps/i.test(e.target.value) ? 'kaps.' : f.ico === 'pill' ? 'tabl.' : 'szt.';
+    }
+  });
+  on('#med-delete', 'click', deleteMedicine);
+  on('#med-pack-list', 'change', onPackChange);
+  on('#med-pack-list', 'click', onPackClick);
+  on('#pack-add-btn', 'click', addPack);
+  on('#med-log', 'click', (e) => {
+    const b = e.target.closest('[data-log-undo]');
+    if (b) undoMedLog(b.dataset.logUndo);
+  });
+  on('#med-scan-barcode', 'click', async () => {
+    const code = await Scanner.scanBarcode();
+    if (code) $('#med-form').elements.barcode.value = code;
+  });
+  on('#med-scan-expiry', 'click', async () => {
+    const date = await Scanner.scanExpiry((text) => api('/expiry/parse', { method: 'POST', body: { text } }));
+    if (date) $('#med-form').elements.expires_at.value = date;
+  });
+  on('#take-form', 'submit', saveTake);
+  on('#take-form', 'click', (e) => {
+    const step = e.target.closest('[data-step]');
+    const form = $('#take-form');
+    if (step) {
+      const unit = $('#take-unit').textContent;
+      const inc = unit === 'ml' ? 2.5 : unit === 'g' ? 0.5 : 1;
+      form.elements.amount.value = Math.max(0, Number(form.elements.amount.value || 0) + Number(step.dataset.step) * inc);
+    }
+    const person = e.target.closest('[data-take-person]');
+    if (person) {
+      const same = form.elements.person.value === person.dataset.takePerson;
+      form.elements.person.value = same ? '' : person.dataset.takePerson;
+      $$('[data-take-person]').forEach((b) => b.setAttribute('aria-pressed', String(!same && b === person)));
+    }
+  });
+
+  // Pulpit: szybkie akcje i przejścia
+  on('#view-dashboard', 'click', (e) => {
+    const q = e.target.closest('[data-quick]');
+    if (!q) return;
+    const act = q.dataset.quick;
+    if (act === 'scan') scanFlow();
+    else if (act === 'consume') { openQuick(); }
+    else if (act === 'receipt') openReceipt();
+    else if (act === 'medicine') showView('pharmacy');
+  });
+  document.addEventListener('click', (e) => {
+    const g = e.target.closest('[data-goto]');
+    if (g && state.user) showView(g.dataset.goto);
+  });
+
+  // Motyw
+  on('#theme-btn', 'click', () => {
+    const dark = document.documentElement.dataset.theme === 'dark'
+      || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
+    setTheme(dark ? 'light' : 'dark');
+  });
+  on('#theme-seg', 'click', (e) => {
+    const b = e.target.closest('[data-theme-set]');
+    if (b) setTheme(b.dataset.themeSet);
+  });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+  applyTheme();
+
   // Konta
   on('#auth-form', 'submit', submitAuth);
   on('#btn-logout', 'click', logout);
   on('#user-chip', 'click', () => showView('settings'));
+  on('#avatar-btn', 'click', () => showView('settings'));
   on('#users-list', 'click', onUserAction);
   on('#user-form', 'submit', addUser);
   on('#password-form', 'submit', changePassword);
@@ -1399,6 +1921,7 @@ window.addEventListener('hashchange', () => {
 
 async function startApp() {
   await loadDicts();
+  state.users = await api('/users').catch(() => []);
   const initial = location.hash.slice(1);
   showView(VIEWS.includes(initial) ? initial : 'dashboard');
 }

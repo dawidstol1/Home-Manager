@@ -10,6 +10,7 @@
  */
 
 const { Pool, types } = require('pg');
+const pharmacy = require('./pharmacy');
 
 const DEFAULT_URL = 'postgres://homemanager:homemanager@localhost:5432/homemanager';
 const REPORT_TZ = process.env.REPORT_TZ || 'Europe/Warsaw';
@@ -324,6 +325,7 @@ class Store {
     try {
       await client.query('SELECT pg_advisory_lock(727001)');
       await client.query(SCHEMA);
+      await client.query(pharmacy.SCHEMA);
       if (seed) await this.seedDefaults(client);
     } finally {
       await client.query('SELECT pg_advisory_unlock(727001)').catch(() => {});
@@ -1218,6 +1220,7 @@ class Store {
       service_due: eq[0].service_due,
       spent_month: round2(money[0].spent),
       wasted_month: round2(money[0].wasted),
+      ...(await this.medicineStats()),
       by_category: byCategory,
     };
   }
@@ -1293,19 +1296,21 @@ class Store {
   // ---------- Import / eksport ----------
 
   async exportAll() {
-    const [categories, locations, items, batches] = await Promise.all([
+    const [categories, locations, items, batches, pharm] = await Promise.all([
       this.q('SELECT id, name FROM categories ORDER BY id'),
       this.q('SELECT id, name FROM locations ORDER BY id'),
       this.q('SELECT * FROM items ORDER BY id'),
       this.q('SELECT item_id, quantity, expires_at FROM batches ORDER BY id'),
+      this.exportMedicines(),
     ]);
     return {
-      version: 3,
+      version: 4,
       exported_at: new Date().toISOString(),
       categories: categories.rows,
       locations: locations.rows,
       items: items.rows,
       batches: batches.rows,
+      ...pharm,
     };
   }
 
@@ -1349,7 +1354,8 @@ class Store {
       for (const e of eqLocs) {
         await c.query('UPDATE equipment SET location_id = (SELECT id FROM locations WHERE lower(name) = lower($1)) WHERE id = $2', [e.name, e.id]);
       }
-      return { items: items.length };
+      const medicines = Array.isArray(data.medicines) ? await this.importMedicines(c, data) : undefined;
+      return { items: items.length, ...(medicines !== undefined ? { medicines } : {}) };
     }).catch((err) => {
       throw this.#fkError(err);
     });
@@ -1372,6 +1378,8 @@ function similarity(a, b) {
   }
   return hits / Math.max(a.length, Math.min(b.length, 3));
 }
+
+pharmacy.install(Store, { ValidationError, NotFoundError, toNumber, toDate, toId, toText, toBarcode, today, addDays });
 
 module.exports = {
   Store, ValidationError, NotFoundError, today, addDays, toBarcode, nameKey, DEFAULT_URL, REASONS, DOC_KINDS,

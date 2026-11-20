@@ -23,6 +23,7 @@ const MIME = {
   '.jpg': 'image/jpeg',
   '.webp': 'image/webp',
   '.webmanifest': 'application/manifest+json; charset=utf-8',
+  '.woff2': 'font/woff2',
 };
 const MAX_JSON = 5 * 1024 * 1024;
 
@@ -277,6 +278,22 @@ function buildRoutes({ store, lookupProduct, images, files, limiter, cfg }) {
     ['GET', /^\/api\/items\/(\d+)\/history$/, ({ m }) => store.getHistory(m[1])],
     ['PATCH', /^\/api\/batches\/(\d+)$/, (ctx) => store.updateBatch(ctx.m[1], ctx.body, uid(ctx))],
     ['DELETE', /^\/api\/batches\/(\d+)$/, (ctx) => store.removeBatch(ctx.m[1], { reason: ctx.query.get('reason') ?? 'wasted', ...uid(ctx) })],
+
+    // ----- Domowa apteka -----
+    ['GET', /^\/api\/medicines$/, ({ query }) => store.listMedicines(Object.fromEntries(query))],
+    ['POST', /^\/api\/medicines$/, async ({ body, user }) => ({ status: 201, body: await store.createMedicine(body, { userId: user.id }) })],
+    ['GET', /^\/api\/medicines\/journal$/, ({ query }) => store.medicineJournal({ limit: query.get('limit') })],
+    ['GET', /^\/api\/medicines\/suggestions$/, () => store.medicineSuggestions()],
+    ['POST', /^\/api\/medicines\/dispose-expired$/, ({ user }) => store.disposeExpiredMedicines({ userId: user.id })],
+    ['GET', /^\/api\/medicines\/(\d+)$/, ({ m }) => store.getMedicine(m[1])],
+    ['PUT', /^\/api\/medicines\/(\d+)$/, ({ m, body }) => store.updateMedicine(m[1], body)],
+    ['PATCH', /^\/api\/medicines\/(\d+)$/, ({ m, body }) => store.updateMedicine(m[1], body)],
+    ['DELETE', /^\/api\/medicines\/(\d+)$/, ({ m }) => store.deleteMedicine(m[1])],
+    ['POST', /^\/api\/medicines\/(\d+)\/packs$/, async ({ m, body, user }) => ({ status: 201, body: await store.addMedicinePack(m[1], body, { userId: user.id }) })],
+    ['POST', /^\/api\/medicines\/(\d+)\/take$/, ({ m, body, user }) => store.takeMedicine(m[1], body, { userId: user.id })],
+    ['PATCH', /^\/api\/medicine-packs\/(\d+)$/, ({ m, body, user }) => store.updateMedicinePack(m[1], body, { userId: user.id })],
+    ['DELETE', /^\/api\/medicine-packs\/(\d+)$/, ({ m, user }) => store.removeMedicinePack(m[1], { userId: user.id })],
+    ['POST', /^\/api\/medicine-log\/(\d+)\/undo$/, ({ m }) => store.undoMedicineLog(m[1])],
 
     // ----- Sprzęty i dokumenty -----
     ['GET', /^\/api\/equipment$/, ({ query }) => store.listEquipment(Object.fromEntries(query))],

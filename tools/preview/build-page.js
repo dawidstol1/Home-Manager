@@ -14,14 +14,16 @@ const OUT = process.argv[3] || path.join(D, 'out');
   const body = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('</body>'))
     .replace(/<script src="[^"]+"><\/script>\s*/g, '');
 
-  let css = read(R + 'public/styles.css');
-  const dark = css.match(/@media \(prefers-color-scheme: dark\) \{\s*:root \{([\s\S]*?)\}\s*\}/);
-  css = css.replace(dark[0], `@media (prefers-color-scheme: dark) {\n  :root:not([data-theme="light"]) {${dark[1]}}\n}\n:root[data-theme="dark"] {${dark[1]}}`);
+  // Fonty z Google Fonts (Artifact nie serwuje plików .woff2); motyw jasny/ciemny jest już w CSS.
+  let css = read(R + 'public/styles.css').replace(/@font-face \{[\s\S]*?\}\n/g, '');
+  css += '\n:root { --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; --font-display: "Plus Jakarta Sans", "Inter", system-ui, sans-serif; }\n';
 
   let app = read(R + 'public/app.js').replace(/\/images\/\$\{/g, 'images/${');
   const docLine = app.match(/const docUrl = .*\n/)[0];
   app = app.replace(docLine, 'const docUrl = (id) => window.__docUrl(id);\n');
   app = app.replace(/if \('serviceWorker' in navigator[\s\S]*$/, '');
+  // Motyw „jak w systemie” zostawia data-theme ustawiony przez stronę, w której osadzony jest podgląd.
+  app = app.replace('else delete document.documentElement.dataset.theme;', '');
   const scanner = read(R + 'public/scanner.js').replace("'vendor/zxing.min.js'", "'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js'");
 
   const old = JSON.parse(read(path.join(D, 'demo', 'data.json')));
@@ -32,12 +34,14 @@ const OUT = process.argv[3] || path.join(D, 'out');
 
   const out = `<title>Home-Manager</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..800&family=Plus+Jakarta+Sans:wght@500..800&display=swap">
 <style>
 ${css}
 body { background: var(--bg); }
-.demo-note { max-width: 1100px; margin: 12px auto 0; padding: 10px 14px; border-radius: 10px; background: var(--warn-bg); color: var(--text);
-  margin-left: max(16px, env(safe-area-inset-left, 0px)); margin-right: max(16px, env(safe-area-inset-right, 0px)); font-size: .9rem; }
-@media (min-width: 1132px) { .demo-note { margin-left: auto; margin-right: auto; } }
+.demo-note { margin: 0 max(16px, env(safe-area-inset-right, 0px)) 12px max(16px, env(safe-area-inset-left, 0px)); padding: 10px 14px;
+  border-radius: 14px; background: var(--primary-soft); color: var(--text); font-size: .88rem; }
+@media (min-width: 901px) { .demo-note { margin: 0 32px 12px; } }
 #preview-loading { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: var(--bg); color: var(--text);
   text-align: center; padding: 24px; font-size: 1rem; }
 #preview-loading .spin { width: 36px; height: 36px; border-radius: 50%; border: 4px solid var(--border); border-top-color: var(--primary);
