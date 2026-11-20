@@ -1941,5 +1941,13 @@ async function init() {
 init();
 
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
-  navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('Service worker:', e));
+  // Gdy na serwerze jest nowa wersja, nowy service worker przejmuje stronę – przeładuj raz, żeby ją pokazać.
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadController && !reloaded) { reloaded = true; location.reload(); }
+  });
+  navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+    .then((reg) => reg.update())
+    .catch((e) => console.warn('Service worker:', e));
 }

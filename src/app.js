@@ -81,8 +81,9 @@ function serveStatic(req, res, pathname) {
   fs.readFile(file, (err, data) => {
     if (err) return send(res, 404, 'Not found');
     const headers = { 'Content-Type': MIME[path.extname(file)] ?? 'application/octet-stream' };
-    // sw.js i index.html nie mogą być długo cache'owane, inaczej aktualizacje nie dotrą do klientów.
-    if (['sw.js', 'index.html'].includes(path.basename(file))) headers['Cache-Control'] = 'no-cache';
+    // Kod interfejsu zawsze sprawdzany na serwerze – inaczej aktualizacje nie dotrą do klientów.
+    // Fonty i ikony się nie zmieniają, mogą leżeć w pamięci przeglądarki dłużej.
+    headers['Cache-Control'] = ['.woff2', '.png', '.svg'].includes(path.extname(file)) ? 'public, max-age=604800' : 'no-cache';
     send(res, 200, data, headers);
   });
 }
