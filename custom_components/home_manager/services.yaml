@@ -43,3 +43,129 @@ take_medicine:
       selector:
         config_entry:
           integration: home_manager
+adjust_item:
+  fields:
+    item:
+      required: true
+      example: "Mleko"
+      selector:
+        text:
+    amount:
+      default: 1
+      selector:
+        number:
+          min: 0.001
+          max: 100000
+          step: 0.001
+          mode: box
+    mode:
+      default: used
+      selector:
+        select:
+          translation_key: mode
+          options:
+            - used
+            - wasted
+            - add
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: home_manager
+find_items:
+  fields:
+    query:
+      example: "mleko"
+      selector:
+        text:
+    status:
+      selector:
+        select:
+          translation_key: status
+          options:
+            - low
+            - expiring
+            - expired
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: home_manager
+find_medicines:
+  fields:
+    query:
+      example: "gorączka"
+      selector:
+        text:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: home_manager
+add_item:
+  fields:
+    name:
+      required: true
+      example: "Masło"
+      selector:
+        text:
+    quantity:
+      default: 1
+      selector:
+        number:
+          min: 0
+          max: 100000
+          step: 0.001
+          mode: box
+    unit:
+      default: "szt."
+      selector:
+        text:
+    min_quantity:
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 100000
+          step: 0.001
+          mode: box
+    category:
+      example: "Żywność"
+      selector:
+        text:
+    location:
+      example: "Kuchnia"
+      selector:
+        text:
+    expires_at:
+      selector:
+        date:
+    barcode:
+      selector:
+        text:
+    notes:
+      selector:
+        text:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: home_manager
+add_medicine_pack:
+  fields:
+    medicine:
+      required: true
+      example: "Paracetamol"
+      selector:
+        text:
+    quantity:
+      required: true
+      selector:
+        number:
+          min: 0.001
+          max: 100000
+          step: 0.001
+          mode: box
+    expires_at:
+      selector:
+        date:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: home_manager

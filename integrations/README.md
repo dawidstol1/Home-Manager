@@ -10,7 +10,9 @@ Niczego nowego nie trzeba stawiać w homelabie.
 | „Wymaga uwagi” do automatyzacji i powiadomień | ✅ czujnik binarny | ✅ urządzenie „Alert” |
 | Kalendarz domowy | ✅ zakładka Kalendarz (podgląd, dodawanie, usuwanie) | tekst „Dziś w kalendarzu” |
 | Lista zakupów | ✅ lista zadań – odhaczenie = kupione | tekst „Lista zakupów” |
-| Akcje: zużycie po kodzie, podanie leku | ✅ | – |
+| Każdy produkt i lek jako encja (ilość, termin, miejsce, ostatnie podanie) + przyciski „Zużyj 1” / „Podaj dawkę” | ✅ | – |
+| Akcje: zużyj / wyrzuć / dodaj, znajdź produkt lub lek „na gorączkę”, dodaj produkt, dodaj opakowanie leku, podaj lek, zużycie po kodzie | ✅ | – |
+| Komendy głosowe po polsku (Asystent): „ile mamy mleka”, „co mamy na gorączkę”, „podaj ibuprom dla Zosi”… | ✅ | – |
 
 ---
 
@@ -58,6 +60,8 @@ Skopiuj katalog `custom_components/home_manager` z repozytorium do `config/custo
 - *Adres aplikacji w menu* – gdy telefon ma otwierać aplikację pod innym adresem niż ten z konfiguracji
   (np. integracja łączy się przez `http://192.168.1.30`, a z telefonu poza domem otwierasz `https://zasoby.example.pl`).
 - *Odświeżanie czujników* – co ile minut (domyślnie 5).
+- *Czujnik i przycisk dla każdego produktu* – wyłącz, jeśli masz bardzo dużo produktów (leki zostają).
+- *Polskie komendy dla Asystenta* – włącz/wyłącz komendy głosowe.
 
 W menu aplikacja pyta o login – każdy domownik loguje się swoim kontem (na telefonie i komputerze osobno; logowanie jest zapamiętywane).
 
@@ -76,6 +80,47 @@ W menu aplikacja pyta o login – każdy domownik loguje się swoim kontem (na t
 | `todo.zasoby_domowe_lista_zakupow` | odhaczenie pozycji = „kupione” (stan w aplikacji rośnie) |
 
 Nazwy encji zależą od języka Home Assistant – powyżej dla polskiego.
+
+**Każdy produkt i lek** (urządzenia „Zasoby domowe – produkty” i „Zasoby domowe – apteka”):
+
+| Encja | Co pokazuje / robi |
+|---|---|
+| `sensor.zasoby_domowe_produkty_mleko` | ilość (np. `2 l`), zdjęcie produktu; atrybuty: miejsce, kategoria, termin, niski stan, kod |
+| `button.zasoby_domowe_produkty_mleko_zuzyj_1` | zdejmuje 1 szt. (z partii o najkrótszym terminie) |
+| `sensor.zasoby_domowe_apteka_paracetamol` | ilość leku; atrybuty: na co, dla kogo, gdzie leży, dawkowanie, termin, kiedy i komu ostatnio podany |
+| `button.zasoby_domowe_apteka_paracetamol_podaj_dawke` | zapisuje podanie jednej dawki (1 tabl. / 5 ml) |
+
+Nowe produkty i leki dodane w aplikacji pojawiają się w HA same przy najbliższym odświeżeniu. Taki przycisk albo
+czujnik możesz położyć na pulpicie (karta „Encja”/„Przycisk”) – np. „Podaj dawkę” syropu dla dziecka przy łóżeczku.
+
+### Komendy głosowe (Asystent, po polsku)
+
+Działają w Asystencie Home Assistant (aplikacja na telefonie, głośniki z Assist). Nazwy można mówić w dowolnej formie –
+„mleka”, „ibupromu”, „dla Zosi”.
+
+| Powiedz | Odpowiedź / działanie |
+|---|---|
+| „ile mamy mleka”, „czy mamy jeszcze jogurt” | ilość, miejsce i termin |
+| „co mamy na gorączkę”, „co mogę dać na ból zęba” | leki z apteczki opisane „na co” |
+| „podaj ibuprom dla Zosi”, „podaj Zosi paracetamol” | zapis podania jednej dawki w dzienniku |
+| „co jest do kupienia”, „czego brakuje” | lista zakupów |
+| „co mamy dziś w kalendarzu”, „jakie plany na jutro” | wspólne wpisy (prywatnych nie czyta na głos) |
+| „zużyj jogurt”, „wyrzuć ser” | −1 szt. (wyrzucone trafia do „zmarnowanych”) |
+| „co jest po terminie” | produkty i leki po terminie |
+
+### Akcje do automatyzacji i skryptów
+
+| Akcja | Co robi |
+|---|---|
+| `home_manager.adjust_item` | `item: mleko`, `amount: 1`, `mode: used / wasted / add` |
+| `home_manager.add_item` | nowy produkt (nazwa, ilość, jednostka, kategoria, miejsce, termin, kod) |
+| `home_manager.find_items` | zwraca produkty (`query`, `status: low / expiring / expired`) |
+| `home_manager.find_medicines` | zwraca leki po nazwie albo „na co” (`query: gorączka`) |
+| `home_manager.take_medicine` | podanie leku (`medicine`, `amount`, `person`, `note`) |
+| `home_manager.add_medicine_pack` | nowe opakowanie leku z terminem |
+| `home_manager.consume_barcode` | −1 szt. po kodzie kreskowym (np. z czytnika) |
+
+Akcje `find_*` zwracają dane (`response_variable`) – można je wykorzystać w powiadomieniu albo w odpowiedzi Asystenta.
 
 ### Przykładowe automatyzacje
 
@@ -149,6 +194,9 @@ a powód widać w **Konfiguracja → Log**.
 
 ## Bezpieczeństwo
 
+- Home Assistant widzi to, co konto, które utworzyło klucz (także jego prywatne wpisy w kalendarzu – w HA
+  oznaczone kłódką 🔒). Komendy głosowe nie czytają prywatnych wpisów. Jeśli nie chcesz, żeby prywatne wpisy były
+  w HA, utwórz klucz z osobnego konta domownika, np. „Dom”.
 - Klucz API działa jak konto, które go utworzyło, ale **nie może** zmieniać haseł, kont, kluczy, adresów osadzania
   ani importować kopii zapasowej. Usunięcie klucza w Ustawieniach od razu odcina wtyczkę.
 - W bazie zapisany jest tylko skrót klucza.

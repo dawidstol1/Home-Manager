@@ -11,6 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import HomeManagerConfigEntry
+from .dynamic import RowEntity, medicine_icon, track_rows
 from .entity import HomeManagerEntity
 
 
@@ -91,6 +92,14 @@ SENSORS: tuple[HMSensorDescription, ...] = (
 
 async def async_setup_entry(hass: HomeAssistant, entry: HomeManagerConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback) -> None:
     async_add_entities(HomeManagerSensor(entry, d) for d in SENSORS)
+    track_rows(
+        entry,
+        async_add_entities,
+        {
+            "items": lambda row: [ItemSensor(entry, row)],
+            "medicines": lambda row: [MedicineSensor(entry, row)],
+        },
+    )
 
 
 class HomeManagerSensor(HomeManagerEntity, SensorEntity):
@@ -107,3 +116,93 @@ class HomeManagerSensor(HomeManagerEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict:
         return self.entity_description.attrs(self.coordinator.data)
+
+
+class ItemSensor(RowEntity, SensorEntity):
+    """Ilość produktu (np. „Mleko: 2 l”) z terminem, miejscem i zdjęciem."""
+
+    kind = "items"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:package-variant"
+
+    def __init__(self, entry: HomeManagerConfigEntry, row: dict) -> None:
+        super().__init__(entry, row, "quantity")
+        self._attr_name = row["name"]
+
+    @property
+    def native_value(self):
+        return self.row["quantity"] if self.row else None
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        return self.row["unit"] if self.row else None
+
+    @property
+    def entity_picture(self) -> str | None:
+        r = self.row
+        if r and r.get("image"):
+            return f"{self.entry.runtime_data.client.url}/images/{r['image']}"
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        r = self.row or {}
+        low = r.get("min_quantity", 0) > 0 and r.get("quantity", 0) <= r.get("min_quantity", 0)
+        return {
+            "item_id": r.get("id"),
+            "category": r.get("category"),
+            "location": r.get("location"),
+            "expires_at": r.get("expires_at"),
+            "min_quantity": r.get("min_quantity"),
+            "low": low,
+            "batches": r.get("batch_count"),
+            "barcode": r.get("barcode"),
+            "price": r.get("price"),
+        }
+
+
+class MedicineSensor(RowEntity, SensorEntity):
+    """Ilość leku z terminem, dawkowaniem i ostatnim podaniem."""
+
+    kind = "medicines"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, entry: HomeManagerConfigEntry, row: dict) -> None:
+        super().__init__(entry, row, "quantity")
+        self._attr_name = row["name"]
+
+    @property
+    def icon(self) -> str:
+        return medicine_icon((self.row or {}).get("form", ""))
+
+    @property
+    def native_value(self):
+        return self.row["quantity"] if self.row else None
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        return self.row["unit"] if self.row else None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        r = self.row or {}
+        last = r.get("last_taken") or {}
+        return {
+            "medicine_id": r.get("id"),
+            "substance": r.get("substance"),
+            "strength": r.get("strength"),
+            "form": r.get("form"),
+            "purpose": r.get("purpose"),
+            "person": r.get("person"),
+            "kit": r.get("kit"),
+            "dosage": r.get("dosage"),
+            "prescription": r.get("prescription"),
+            "next_deadline": r.get("next_deadline"),
+            "has_expired_packs": r.get("has_expired"),
+            "expiring": r.get("expiring"),
+            "low": r.get("low"),
+            "opened": r.get("opened"),
+            "last_taken": last.get("created_at"),
+            "last_taken_person": last.get("person"),
+            "last_taken_amount": last.get("amount"),
+        }

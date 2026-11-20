@@ -8,28 +8,23 @@ from __future__ import annotations
 
 import logging
 
-import voluptuous as vol
-
 from homeassistant.components import frontend
 from homeassistant.const import CONF_URL, CONF_VERIFY_SSL, Platform
-from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady, HomeAssistantError, ServiceValidationError
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 
 from .api import CannotConnect, HomeManagerClient, HomeManagerError, InvalidAuth
-from .const import CONF_PANEL_URL, CONF_SHOW_PANEL, CONF_TOKEN, DOMAIN, PANEL_ICON, PANEL_TITLE
+from . import assist, services
+from .const import CONF_PANEL_URL, CONF_SHOW_PANEL, CONF_TOKEN, CONF_VOICE, DOMAIN, PANEL_ICON, PANEL_TITLE
 from .coordinator import HomeManagerConfigEntry, HomeManagerCoordinator, HomeManagerData
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.BINARY_SENSOR, Platform.CALENDAR, Platform.SENSOR, Platform.TODO]
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.CALENDAR, Platform.SENSOR, Platform.TODO]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
-
-SERVICE_CONSUME = "consume_barcode"
-SERVICE_TAKE_MEDICINE = "take_medicine"
-ATTR_ENTRY = "config_entry_id"
 
 
 def _panel_path(hass: HomeAssistant, entry: HomeManagerConfigEntry) -> str:
@@ -40,73 +35,7 @@ def _panel_path(hass: HomeAssistant, entry: HomeManagerConfigEntry) -> str:
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Akcje (usługi) wspólne dla wszystkich wpisów."""
-
-    def _client(call: ServiceCall) -> tuple[HomeManagerClient, HomeManagerCoordinator]:
-        entries = [e for e in hass.config_entries.async_loaded_entries(DOMAIN)]
-        wanted = call.data.get(ATTR_ENTRY)
-        if wanted:
-            entries = [e for e in entries if e.entry_id == wanted]
-        if not entries:
-            raise ServiceValidationError("Brak skonfigurowanej integracji Zasoby domowe")
-        data: HomeManagerData = entries[0].runtime_data
-        return data.client, data.coordinator
-
-    async def consume(call: ServiceCall) -> ServiceResponse:
-        client, coordinator = _client(call)
-        try:
-            result = await client.consume(call.data["barcode"], call.data.get("reason", "used"))
-        except HomeManagerError as err:
-            raise HomeAssistantError(str(err)) from err
-        await coordinator.async_request_refresh()
-        item = result.get("item", {})
-        return {"name": item.get("name"), "quantity": item.get("quantity"), "unit": item.get("unit")}
-
-    async def take_medicine(call: ServiceCall) -> ServiceResponse:
-        client, coordinator = _client(call)
-        query = str(call.data["medicine"]).strip()
-        try:
-            found = await client.medicines(query)
-        except HomeManagerError as err:
-            raise HomeAssistantError(str(err)) from err
-        exact = [m for m in found if m["name"].lower() == query.lower() or str(m["id"]) == query]
-        med = (exact or found or [None])[0]
-        if med is None:
-            raise ServiceValidationError(f"Nie znaleziono leku „{query}” w apteczce")
-        try:
-            result = await client.take_medicine(med["id"], call.data.get("amount", 1), call.data.get("person", ""), call.data.get("note", ""))
-        except HomeManagerError as err:
-            raise HomeAssistantError(str(err)) from err
-        await coordinator.async_request_refresh()
-        return {"name": result["name"], "left": result["quantity"], "unit": result["unit"]}
-
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_CONSUME,
-        consume,
-        schema=vol.Schema(
-            {
-                vol.Required("barcode"): cv.string,
-                vol.Optional("reason", default="used"): vol.In(["used", "wasted"]),
-                vol.Optional(ATTR_ENTRY): cv.string,
-            }
-        ),
-        supports_response=SupportsResponse.OPTIONAL,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_TAKE_MEDICINE,
-        take_medicine,
-        schema=vol.Schema(
-            {
-                vol.Required("medicine"): cv.string,
-                vol.Optional("amount", default=1): vol.All(vol.Coerce(float), vol.Range(min=0.01)),
-                vol.Optional("person", default=""): cv.string,
-                vol.Optional("note", default=""): cv.string,
-                vol.Optional(ATTR_ENTRY): cv.string,
-            }
-        ),
-        supports_response=SupportsResponse.OPTIONAL,
-    )
+    services.register(hass)
     return True
 
 
@@ -138,6 +67,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: HomeManagerConfigEntry) 
         )
     entry.runtime_data = HomeManagerData(client=client, coordinator=coordinator, panel_path=panel_path)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    if entry.options.get(CONF_VOICE, True) and entry.entry_id == hass.config_entries.async_entries(DOMAIN)[0].entry_id:
+        assist.async_register(hass, entry)
     return True
 
 
