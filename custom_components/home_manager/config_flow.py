@@ -17,6 +17,7 @@ from .api import CannotConnect, HomeManagerClient, HomeManagerError, InvalidAuth
 from .const import (
     CONF_ITEM_ENTITIES,
     CONF_PANEL_URL,
+    CONF_PROXY,
     CONF_SCAN_MINUTES,
     CONF_SHOW_PANEL,
     CONF_TOKEN,
@@ -68,7 +69,7 @@ class HomeManagerConfigFlow(ConfigFlow, domain=DOMAIN):
                     return self.async_create_entry(
                         title=f"Zasoby domowe ({user.get('name', url)})",
                         data={CONF_URL: url, CONF_TOKEN: user_input[CONF_TOKEN].strip(), CONF_VERIFY_SSL: user_input[CONF_VERIFY_SSL]},
-                        options={CONF_SHOW_PANEL: True, CONF_PANEL_URL: "", CONF_SCAN_MINUTES: DEFAULT_SCAN_MINUTES, CONF_ITEM_ENTITIES: True, CONF_VOICE: True},
+                        options={CONF_SHOW_PANEL: True, CONF_PANEL_URL: "", CONF_SCAN_MINUTES: DEFAULT_SCAN_MINUTES, CONF_ITEM_ENTITIES: True, CONF_VOICE: True, CONF_PROXY: True},
                     )
         defaults = user_input or {}
         schema = vol.Schema(
@@ -127,6 +128,7 @@ class HomeManagerOptionsFlow(OptionsFlowWithReload):
         schema = vol.Schema(
             {
                 vol.Required(CONF_SHOW_PANEL, default=opts.get(CONF_SHOW_PANEL, True)): bool,
+                vol.Required(CONF_PROXY, default=opts.get(CONF_PROXY, True)): bool,
                 vol.Optional(CONF_PANEL_URL, default=opts.get(CONF_PANEL_URL, "")): str,
                 vol.Required(CONF_SCAN_MINUTES, default=opts.get(CONF_SCAN_MINUTES, DEFAULT_SCAN_MINUTES)): vol.All(
                     vol.Coerce(int), vol.Range(min=1, max=120)

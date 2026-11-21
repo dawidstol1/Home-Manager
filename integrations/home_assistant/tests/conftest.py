@@ -17,6 +17,13 @@ def auto_enable_custom_integrations(enable_custom_integrations):
     yield
 
 
+@pytest.fixture(autouse=True)
+async def home_time_zone(hass):
+    """Ta sama strefa co serwer aplikacji (REPORT_TZ = Europe/Warsaw) – „dziś” jest tym samym dniem."""
+    await hass.config.async_set_time_zone("Europe/Warsaw")
+    yield
+
+
 @pytest.fixture
 def hm_server(socket_enabled):
     """Uruchamia serwer aplikacji z danymi przykładowymi; zwraca adres i klucz API."""
