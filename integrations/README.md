@@ -55,10 +55,16 @@ Skopiuj katalog `custom_components/home_manager` z repozytorium do `config/custo
 3. **Klucz API** – klucz z kroku 1.
 4. Gotowe: w bocznym menu pojawi się **Zasoby domowe** (cała aplikacja), a w urządzeniach – „Zasoby domowe” z czujnikami.
 
+Aplikacja w menu otwiera się **przez Home Assistant** – działa wszędzie tam, gdzie działa HA: w domu, przez
+Nginx Proxy Manager, Nabu Casa i w aplikacji HA na telefonie poza domem. Nie trzeba wystawiać aplikacji osobno
+do internetu ani dopisywać adresu HA w „Gdzie wolno pokazać aplikację”. Dostęp mają tylko zalogowani użytkownicy HA.
+
 **Opcje** (Konfiguruj przy integracji):
 - *Pokaż aplikację w menu bocznym* – włącz/wyłącz panel.
-- *Adres aplikacji w menu* – gdy telefon ma otwierać aplikację pod innym adresem niż ten z konfiguracji
-  (np. integracja łączy się przez `http://192.168.1.30`, a z telefonu poza domem otwierasz `https://zasoby.example.pl`).
+- *Otwieraj aplikację przez Home Assistant* – domyślnie włączone (zalecane).
+- *Adres aplikacji w menu* – tylko gdy wyłączysz poprzednią opcję: telefon otwiera wtedy aplikację bezpośrednio pod
+  tym adresem (musi być osiągalny z telefonu i mieć `https://`, jeśli HA ma `https://`; dodaj adres HA w aplikacji
+  w „Gdzie wolno pokazać aplikację”).
 - *Odświeżanie czujników* – co ile minut (domyślnie 5).
 - *Czujnik i przycisk dla każdego produktu* – wyłącz, jeśli masz bardzo dużo produktów (leki zostają).
 - *Polskie komendy dla Asystenta* – włącz/wyłącz komendy głosowe.
@@ -162,6 +168,33 @@ data:
   barcode: "5900512300108"
   reason: used      # albo wasted – trafi do „zmarnowanych”
 ```
+
+---
+
+### Home Assistant za Nginx Proxy Manager (dostęp z internetu)
+
+Jeśli `https://twoja-domena` pokazuje **„400: Bad Request”**, Home Assistant nie ufa proxy. To ustawienie samego HA:
+
+1. **Home Assistant → `configuration.yaml`** (np. dodatkiem *File editor*):
+   ```yaml
+   http:
+     use_x_forwarded_for: true
+     trusted_proxies:
+       - 192.168.1.50        # adres IP serwera/kontenera z Nginx Proxy Manager
+   ```
+   - NPM w Dockerze na tym samym serwerze co HA → wpisz sieć Dockera, np. `172.16.0.0/12`.
+   - Masz już sekcję `http:` → dopisz te dwie opcje do niej (nie twórz drugiej).
+   - Nie znasz adresu? Po wejściu przez domenę: **Ustawienia → System → Logi** – HA wypisze
+     „A request from a reverse proxy was received from **172.18.0.5**…”. Ten adres wpisz.
+2. **Uruchom ponownie Home Assistant** (Ustawienia → System → ⋮ → Uruchom ponownie).
+3. **Nginx Proxy Manager → Hosts → Proxy Hosts →** host HA → *Edit*:
+   - *Details*: Scheme `http`, Forward Hostname/IP = adres HA, Forward Port `8123`,
+     ✅ **Websockets Support** (bez tego HA zawiesza się na „Ładowanie danych”), ✅ Block Common Exploits.
+   - *SSL*: certyfikat Let's Encrypt, ✅ Force SSL, ✅ HTTP/2 Support.
+   - *Advanced*: nic nie trzeba wpisywać.
+4. W aplikacji Home Assistant na telefonie: **Ustawienia → Aplikacja → Serwer → Adres zewnętrzny** = `https://twoja-domena`.
+
+Aplikacji Zasoby domowe **nie trzeba** wystawiać w NPM – panel „Zasoby domowe” idzie przez Home Assistant.
 
 ---
 
