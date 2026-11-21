@@ -43,10 +43,11 @@
           "panel_url": "Adres aplikacji w menu (opcjonalnie)",
           "scan_minutes": "Odświeżanie czujników (minuty)",
           "item_entities": "Czujnik i przycisk dla każdego produktu",
-          "voice": "Polskie komendy dla Asystenta (np. „ile mamy mleka”)"
+          "voice": "Polskie komendy dla Asystenta (np. „ile mamy mleka”)",
+          "via_home_assistant": "Otwieraj aplikację przez Home Assistant (działa też poza domem, np. przez Nginx Proxy Manager)"
         },
         "data_description": {
-          "panel_url": "Gdy telefon ma otwierać aplikację pod innym adresem niż Home Assistant (np. https://zasoby.example.pl z internetu). Puste = adres serwera. Dodaj adres Home Assistant w aplikacji: Ustawienia → Integracje → Gdzie wolno pokazać aplikację."
+          "panel_url": "Używany tylko, gdy wyłączysz „Otwieraj aplikację przez Home Assistant”. Wtedy telefon otwiera aplikację bezpośrednio pod tym adresem – musi być osiągalny i mieć https, jeśli HA ma https."
         }
       }
     },

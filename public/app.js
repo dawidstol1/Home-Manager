@@ -24,7 +24,8 @@ const state = { categories: [], locations: [], users: [], currentView: 'dashboar
 
 /** Wywołanie API. `raw` – wysyła treść bez zamiany na JSON (pliki). */
 async function api(path, { method = 'GET', body, raw, headers = {} } = {}) {
-  const res = await fetch(`/api${path}`, {
+  // Adresy względne – aplikacja działa też pod ścieżką (np. przez Home Assistant: /api/home_manager/proxy/…/).
+  const res = await fetch(`api${path}`, {
     method,
     headers: { ...authHeaders(), ...(raw ? headers : body ? { 'Content-Type': 'application/json', ...headers } : headers) },
     body: raw ?? (body ? JSON.stringify(body) : undefined),
@@ -361,7 +362,7 @@ function setupEmbeddedFiles() {
   };
   const fix = (img) => {
     const src = img.getAttribute('src');
-    if (!src || !src.startsWith('/api/documents/')) return;
+    if (!src || !/^\/?api\/documents\//.test(src)) return;
     img.removeAttribute('src');
     blobFor(src).then((u) => { img.src = u; }).catch(() => {});
   };
@@ -370,12 +371,12 @@ function setupEmbeddedFiles() {
       for (const n of m.addedNodes) {
         if (n.nodeType !== 1) continue;
         if (n.tagName === 'IMG') fix(n);
-        n.querySelectorAll?.('img[src^="/api/documents/"]').forEach(fix);
+        n.querySelectorAll?.('img[src*="api/documents/"]').forEach(fix);
       }
     }
   }).observe(document.body, { childList: true, subtree: true });
   document.addEventListener('click', (e) => {
-    const a = e.target.closest('a[href^="/api/documents/"]');
+    const a = e.target.closest('a[href*="api/documents/"]');
     if (!a) return;
     e.preventDefault();
     const win = window.open('', '_blank');
@@ -1069,14 +1070,14 @@ async function loadItems() {
 
 /** Miniatura produktu: zdjęcie z serwera albo pierwsza litera nazwy. */
 function thumb(i, cls = 'thumb') {
-  if (i.image) return `<img class="${cls}" src="/images/${encodeURIComponent(i.image)}" alt="" loading="lazy">`;
+  if (i.image) return `<img class="${cls}" src="images/${encodeURIComponent(i.image)}" alt="" loading="lazy">`;
   return `<span class="${cls} thumb-empty" aria-hidden="true">${esc((i.name || '?').trim().charAt(0).toUpperCase())}</span>`;
 }
 
 /** Podgląd zdjęcia w formularzu: zapisane zdjęcie, podpowiedź z bazy produktów albo nic. */
 function renderFormPhoto(item, previewUrl) {
   const box = $('#item-photo');
-  const src = item?.image ? `/images/${encodeURIComponent(item.image)}?v=${Date.now()}` : previewUrl;
+  const src = item?.image ? `images/${encodeURIComponent(item.image)}?v=${Date.now()}` : previewUrl;
   $('#item-photo-img').hidden = !src;
   if (src) $('#item-photo-img').src = src;
   else $('#item-photo-img').removeAttribute('src');
@@ -1807,7 +1808,7 @@ function equipmentAlerts(list) {
 }
 
 const fmtSize = (b) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1).replace('.', ',')} MB`);
-const docUrl = (id, download = false) => `/api/documents/${id}/file${download ? '?download=1' : ''}`;
+const docUrl = (id, download = false) => `api/documents/${id}/file${download ? '?download=1' : ''}`;
 
 async function loadEquipment() {
   const q = $('#eq-q').value.trim();
@@ -2404,7 +2405,8 @@ async function init() {
 
 init();
 
-if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+// Tryb offline tylko pod własnym adresem (nie pod ścieżką w Home Assistant – tam rządzi HA).
+if ('serviceWorker' in navigator && location.pathname === '/' && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
   // Gdy na serwerze jest nowa wersja, nowy service worker przejmuje stronę – przeładuj raz, żeby ją pokazać.
   const hadController = Boolean(navigator.serviceWorker.controller);
   let reloaded = false;

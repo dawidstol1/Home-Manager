@@ -43,7 +43,8 @@
           "panel_url": "App URL for the sidebar (optional)",
           "scan_minutes": "Sensor refresh (minutes)",
           "item_entities": "Sensor and button for every item",
-          "voice": "Polish Assist sentences"
+          "voice": "Polish Assist sentences",
+          "via_home_assistant": "Open the app through Home Assistant (works away from home too)"
         },
         "data_description": {
           "panel_url": "When the app should open under a different address than the server URL. Add the Home Assistant address in the app: Settings → Integrations."

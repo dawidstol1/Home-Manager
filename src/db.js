@@ -273,8 +273,10 @@ function toReason(value, allowed, fallback) {
   return value;
 }
 
+/** Dzisiejsza data w strefie domu (REPORT_TZ, domyślnie Europe/Warsaw) – po północy w Polsce to już „jutro” w UTC. */
+const DAY_FORMAT = new Intl.DateTimeFormat('en-CA', { timeZone: REPORT_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return DAY_FORMAT.format(new Date());
 }
 
 function addDays(dateStr, days) {

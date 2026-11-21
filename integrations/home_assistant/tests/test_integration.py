@@ -57,8 +57,10 @@ async def test_config_flow(hass: HomeAssistant, hm_server) -> None:
 async def test_sensors_and_panel(hass: HomeAssistant, hm_server) -> None:
     entry = await _setup(hass, hm_server)
     panel = hass.data[DATA_PANELS]["home-manager"]
-    assert panel.component_name == "iframe"
-    assert panel.config == {"url": hm_server["url"]}
+    assert panel.component_name == "custom"
+    assert panel.config["_panel_custom"]["name"] == "home-manager-panel"
+    assert panel.config["_panel_custom"]["module_url"].startswith("/home_manager_static/home-manager-panel.js")
+    assert panel.config["entry_id"] == entry.entry_id
     assert panel.sidebar_title == "Zasoby domowe"
     assert panel.require_admin is False
 
@@ -79,9 +81,12 @@ async def test_sensors_and_panel(hass: HomeAssistant, hm_server) -> None:
     assert "home-manager" not in hass.data[DATA_PANELS]
 
 
-async def test_panel_url_option(hass: HomeAssistant, hm_server) -> None:
-    await _setup(hass, hm_server, panel_url="https://zasoby.example.pl")
-    assert hass.data[DATA_PANELS]["home-manager"].config == {"url": "https://zasoby.example.pl"}
+async def test_direct_panel_option(hass: HomeAssistant, hm_server) -> None:
+    """Bez pośrednictwa HA: zwykła ramka z adresem aplikacji."""
+    await _setup(hass, hm_server, panel_url="https://zasoby.example.pl", via_home_assistant=False)
+    panel = hass.data[DATA_PANELS]["home-manager"]
+    assert panel.component_name == "iframe"
+    assert panel.config == {"url": "https://zasoby.example.pl"}
 
 
 async def test_calendar(hass: HomeAssistant, hm_server) -> None:
