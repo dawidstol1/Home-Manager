@@ -6,13 +6,13 @@ class HomeManagerPanel extends HTMLElement {
     this.attachShadow({ mode: 'open' });
     this.shadowRoot.innerHTML = `
       <style>
-        :host { display: flex; flex-direction: column; height: 100%; background: var(--primary-background-color); }
+        :host { display: flex; flex-direction: column; height: 100vh; height: 100dvh; background: var(--primary-background-color); }
         .bar { display: none; align-items: center; gap: 4px; height: 56px; padding: 0 4px; flex: none;
           background: var(--app-header-background-color, var(--primary-color)); color: var(--app-header-text-color, #fff);
           border-bottom: var(--app-header-border-bottom, none); font-size: 20px; }
         :host([narrow]) .bar { display: flex; }
         .title { margin-left: 8px; }
-        iframe { flex: 1; width: 100%; border: 0; display: block; }
+        iframe { flex: 1 1 auto; min-height: 0; width: 100%; height: 100%; border: 0; display: block; }
         .msg { padding: 24px; font-family: var(--paper-font-body1_-_font-family, sans-serif); color: var(--primary-text-color); }
       </style>
       <div class="bar"><span class="menu"></span><span class="title">Zasoby domowe</span></div>

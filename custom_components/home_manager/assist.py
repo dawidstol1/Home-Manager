@@ -178,8 +178,22 @@ def async_register(hass: HomeAssistant, entry: HomeManagerConfigEntry) -> None:
     if "conversation" not in hass.config.components:
         _LOGGER.debug("Asystent (conversation) nie jest włączony – komendy głosowe pominięte")
         return
-    from homeassistant.components.conversation.agent_manager import get_agent_manager
-    from homeassistant.components.conversation.trigger import TriggerDetails
+    try:
+        from homeassistant.components.conversation.agent_manager import get_agent_manager
+
+        manager = get_agent_manager(hass)
+    except Exception:  # noqa: BLE001 – komendy głosowe nie mogą blokować integracji
+        _LOGGER.warning("Zasoby domowe: komendy głosowe niedostępne w tej wersji Home Assistant", exc_info=True)
+        return
+
+    def register(sentences: list[str], cb) -> None:
+        """Rejestracja zdań – API różni się między wersjami HA (do 2026.9 przez TriggerDetails)."""
+        try:
+            from homeassistant.components.conversation.trigger import TriggerDetails
+        except ImportError:
+            entry.async_on_unload(manager.register_trigger(sentences, cb))
+        else:
+            entry.async_on_unload(manager.register_trigger(TriggerDetails(sentences=sentences, callback=cb)))
 
     assist = Assist(hass, entry)
     handlers = {
@@ -193,7 +207,6 @@ def async_register(hass: HomeAssistant, entry: HomeManagerConfigEntry) -> None:
         "waste": lambda u, r: assist.use(u, r, "wasted"),
         "expired": assist.expired,
     }
-    manager = get_agent_manager(hass)
     for name, sentences in SENTENCES.items():
         handler = handlers[name]
 
@@ -204,4 +217,8 @@ def async_register(hass: HomeAssistant, entry: HomeManagerConfigEntry) -> None:
                 _LOGGER.exception("Asystent: błąd obsługi komendy")
                 return "Coś poszło nie tak przy łączeniu z aplikacją Zasoby domowe."
 
-        entry.async_on_unload(manager.register_trigger(TriggerDetails(sentences=sentences, callback=_cb)))
+        try:
+            register(sentences, _cb)
+        except Exception:  # noqa: BLE001
+            _LOGGER.warning("Zasoby domowe: nie udało się dodać komend głosowych", exc_info=True)
+            return
