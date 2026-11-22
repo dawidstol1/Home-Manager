@@ -6,7 +6,9 @@ class HomeManagerPanel extends HTMLElement {
     this.attachShadow({ mode: 'open' });
     this.shadowRoot.innerHTML = `
       <style>
-        :host { display: flex; flex-direction: column; height: 100vh; height: 100dvh; background: var(--primary-background-color); }
+        :host { display: flex; flex-direction: column; height: 100vh; height: 100dvh; box-sizing: border-box; overflow: hidden;
+          /* pasek gestów iPhone'a / Androida – ramka nie może pod niego wchodzić */
+          padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--primary-background-color); }
         .bar { display: none; align-items: center; gap: 4px; height: 56px; padding: 0 4px; flex: none;
           background: var(--app-header-background-color, var(--primary-color)); color: var(--app-header-text-color, #fff);
           border-bottom: var(--app-header-border-bottom, none); font-size: 20px; }
@@ -44,6 +46,17 @@ class HomeManagerPanel extends HTMLElement {
       menu.narrow = this.hasAttribute('narrow');
       this.shadowRoot.querySelector('.menu').appendChild(menu);
     }
+    // Wysokość = to, co faktycznie zostaje na ekranie pod paskami Home Assistant i telefonu
+    // (w aplikacji HA na telefonie panel zaczyna się niżej niż na samej górze ekranu).
+    this._fit = () => {
+      const top = Math.max(0, this.getBoundingClientRect().top);
+      const h = (window.visualViewport?.height || window.innerHeight) - top;
+      if (h > 200) this.style.height = `${Math.round(h)}px`;
+    };
+    window.addEventListener('resize', this._fit);
+    window.visualViewport?.addEventListener('resize', this._fit);
+    requestAnimationFrame(this._fit);
+    setTimeout(this._fit, 300);
     // Odnawianie sesji panelu co godzinę, gdy panel jest otwarty.
     this._timer = setInterval(() => this._session().catch(() => {}), 3600 * 1000);
     this._maybeStart();
@@ -51,6 +64,8 @@ class HomeManagerPanel extends HTMLElement {
 
   disconnectedCallback() {
     clearInterval(this._timer);
+    window.removeEventListener('resize', this._fit);
+    window.visualViewport?.removeEventListener('resize', this._fit);
   }
 
   async _session() {
