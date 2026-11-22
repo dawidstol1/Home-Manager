@@ -28,15 +28,16 @@ def medicine_icon(form: str) -> str:
     return "mdi:pill"
 
 
+SUB_DEVICES = {"items": "Zasoby domowe – produkty", "medicines": "Zasoby domowe – apteka"}
+
+
 def sub_device(entry: HomeManagerConfigEntry, kind: str) -> DeviceInfo:
-    """Osobne urządzenia „Produkty” i „Apteka”, żeby lista encji była czytelna."""
-    names = {"items": "Zasoby domowe – produkty", "medicines": "Zasoby domowe – apteka"}
+    """Osobne urządzenia „Produkty” i „Apteka” (zakładane w __init__, tu tylko odwołanie)."""
     return DeviceInfo(
         identifiers={(DOMAIN, f"{entry.entry_id}_{kind}")},
-        name=names[kind],
+        name=SUB_DEVICES[kind],
         manufacturer=MANUFACTURER,
         entry_type=DeviceEntryType.SERVICE,
-        via_device=(DOMAIN, entry.entry_id),
     )
 
 

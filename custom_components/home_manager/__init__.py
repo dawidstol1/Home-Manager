@@ -15,14 +15,15 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.const import CONF_URL, CONF_VERIFY_SSL, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 
 from .api import CannotConnect, HomeManagerClient, HomeManagerError, InvalidAuth
 from . import assist, proxy, services
-from .const import CONF_PANEL_URL, CONF_PROXY, CONF_SHOW_PANEL, CONF_TOKEN, CONF_VOICE, DOMAIN, PANEL_ICON, PANEL_TITLE, STATIC_URL
+from .const import CONF_PANEL_URL, CONF_PROXY, CONF_SHOW_PANEL, CONF_TOKEN, CONF_VOICE, DOMAIN, MANUFACTURER, PANEL_ICON, PANEL_TITLE, STATIC_URL
 from .coordinator import HomeManagerConfigEntry, HomeManagerCoordinator, HomeManagerData
+from .dynamic import SUB_DEVICES
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,6 +35,30 @@ def _panel_path(hass: HomeAssistant, entry: HomeManagerConfigEntry) -> str:
     """Pierwszy wpis dostaje „home-manager”, kolejne – z dopiskiem."""
     entries = hass.config_entries.async_entries(DOMAIN)
     return "home-manager" if not entries or entries[0].entry_id == entry.entry_id else f"home-manager-{entry.entry_id[:6].lower()}"
+
+
+def _register_devices(hass: HomeAssistant, entry: HomeManagerConfigEntry) -> None:
+    """Urządzenie główne i podrzędne („produkty”, „apteka”) – powiązane przez via_device_id
+    (stary parametr via_device w DeviceInfo nowsze wersje HA odrzucają)."""
+    registry = dr.async_get(hass)
+    main = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, entry.entry_id)},
+        name="Zasoby domowe",
+        manufacturer=MANUFACTURER,
+        entry_type=dr.DeviceEntryType.SERVICE,
+        configuration_url=entry.options.get(CONF_PANEL_URL) or entry.data[CONF_URL],
+    )
+    for kind, name in SUB_DEVICES.items():
+        sub = registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, f"{entry.entry_id}_{kind}")},
+            name=name,
+            manufacturer=MANUFACTURER,
+            entry_type=dr.DeviceEntryType.SERVICE,
+        )
+        if sub.via_device_id != main.id:
+            registry.async_update_device(sub.id, via_device_id=main.id)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -87,9 +112,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: HomeManagerConfigEntry) 
                 update=True,
             )
     entry.runtime_data = HomeManagerData(client=client, coordinator=coordinator, panel_path=panel_path)
+    _register_devices(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     if entry.options.get(CONF_VOICE, True) and entry.entry_id == hass.config_entries.async_entries(DOMAIN)[0].entry_id:
-        assist.async_register(hass, entry)
+        try:
+            assist.async_register(hass, entry)
+        except Exception:  # noqa: BLE001 – Asystent jest dodatkiem, reszta integracji ma działać
+            _LOGGER.warning("Zasoby domowe: komendy głosowe wyłączone", exc_info=True)
     return True
 
 
