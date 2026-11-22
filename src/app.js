@@ -102,7 +102,7 @@ function contentDisposition(name, inline) {
  * Opcje: public (bez logowania), admin (tylko administrator), raw (treść jako Buffer).
  * Handler zwraca obiekt (200), { status, body, headers } lub undefined (204).
  */
-function buildRoutes({ store, lookupProduct, images, files, limiter, cfg, embed }) {
+function buildRoutes({ store, lookupProduct, images, files, limiter, ipLimiter, cfg, embed }) {
   const withImage = async (pending) => {
     const item = await pending;
     if (item.barcode && !item.image) images.attachLater(item.id);
@@ -140,12 +140,18 @@ function buildRoutes({ store, lookupProduct, images, files, limiter, cfg, embed 
     [
       'POST', /^\/api\/auth\/login$/,
       async ({ body, req }) => {
-        const key = auth.clientIp(req, cfg.trustProxy);
+        // Blokada po 10 pomyłkach dla danego konta z danego adresu i po 50 dla całego adresu.
+        // Przez panel Home Assistant wszyscy domownicy logują się z jednego adresu (HA) –
+        // pomyłki jednej osoby nie mogą blokować pozostałych.
+        const ip = auth.clientIp(req, cfg.trustProxy);
+        const key = `${ip}|${String(body.login ?? '').trim().toLowerCase()}`;
         limiter.check(key);
+        ipLimiter.check(ip);
         const found = await store.findUserForLogin(body.login);
         const ok = found ? await auth.verifyPassword(body.password, found.password_hash) : (await auth.burnTime(body.password), false);
         if (!ok) {
           limiter.fail(key);
+          ipLimiter.fail(ip);
           throw httpError(401, 'Nieprawidłowy login lub hasło');
         }
         limiter.reset(key);
@@ -401,7 +407,7 @@ function createApp(store, { productLookup, images, imagesDir, imageFetch, upload
   const cfg = { trustProxy, secure: secureCookies };
   const embed = { origins: [] };
   const embedReady = store.getEmbedOrigins().then((o) => { embed.origins = o; }).catch(() => {});
-  const routes = buildRoutes({ store, lookupProduct: lookup, images: imageService, files, limiter: auth.createLoginLimiter(), cfg, embed });
+  const routes = buildRoutes({ store, lookupProduct: lookup, images: imageService, files, limiter: auth.createLoginLimiter(), ipLimiter: auth.createLoginLimiter({ limit: 50 }), cfg, embed });
 
   return async function handler(req, res) {
     const url = new URL(req.url, 'http://localhost');

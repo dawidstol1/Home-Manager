@@ -90,3 +90,17 @@ test('blokada po wielu nieudanych logowaniach', async () => {
   }
   assert.equal(last.status, 429);
 });
+
+test('pomyłki jednej osoby nie blokują innych domowników z tego samego adresu (np. panel Home Assistant)', async () => {
+  // „ania” jest już zablokowana w poprzednim teście – inny domownik nadal może się zalogować.
+  const { hashPassword } = require('../src/auth');
+  await app.store.createUser({ name: 'Ola', login: 'ola' }, await hashPassword('haslooli1'));
+  const ok = await app.raw('POST', '/api/auth/login', { body: { login: 'ola', password: 'haslooli1' } });
+  assert.equal(ok.status, 200);
+  // Zgadywanie wielu kont z jednego adresu: po 50 pomyłkach blokada całego adresu.
+  let last;
+  for (let i = 0; i < 52; i++) {
+    last = await app.raw('POST', '/api/auth/login', { body: { login: `ktos${i}`, password: 'zlezlezle' } });
+  }
+  assert.equal(last.status, 429);
+});
