@@ -31,6 +31,9 @@ ile zostało, kiedy traci ważność i co trzeba dokupić.
   widok miesiąca i listy, filtr „moje / domownika”, terminy z domu (gwarancje, przeglądy, ważność leków), najbliższe dni na pulpicie
 - **Home Assistant i Domoticz** – wtyczki z czujnikami (zakupy, terminy, leki, wydatki), kalendarzem, listą zakupów
   i całą aplikacją w menu HA/Domoticza; instrukcja: **[integrations/README.md](integrations/README.md)**
+- **Monitorowanie (OpenTelemetry)** – ślady żądań i zapytań do bazy, metryki (czasy odpowiedzi, stan domu, logowania)
+  i logi do Zabbix 8.0 APM albo dowolnego odbiorcy OTLP; `/api/health` i opcjonalnie `/metrics` (Prometheus);
+  instrukcja: **[docs/MONITOROWANIE-ZABBIX.md](docs/MONITOROWANIE-ZABBIX.md)**
 - **Nowoczesny wygląd** – menu boczne na komputerze, pływający pasek na telefonie, okna jako arkusze od dołu,
   jasny i ciemny motyw (automatycznie albo do wyboru), fonty dołączone do aplikacji (działa bez internetu)
 
@@ -89,7 +92,8 @@ Zmienne środowiskowe:
 | `UPLOADS_DIR` | `data/uploads`          | Katalog na dokumenty sprzętów (paragony, gwarancje, instrukcje) |
 | `TRUST_PROXY` | wyłączone               | `1` za reverse proxy (nginx): prawdziwy IP i wykrywanie HTTPS z nagłówków `X-Forwarded-*` |
 | `COOKIE_SECURE` | automatycznie         | `1` wymusza flagę `Secure` ciasteczka sesji |
-| `REPORT_TZ` | `Europe/Warsaw`           | Strefa czasowa raportów wydatków |
+| `REPORT_TZ` | `Europe/Warsaw`           | Strefa czasowa raportów wydatków i „dzisiejszej” daty |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | wyłączone | Adres odbiorcy OpenTelemetry, np. proxy Zabbix 8 `http://zabbix-proxy:4317` (+ `OTEL_EXPORTER_OTLP_PROTOCOL=grpc`) |
 
 **Baza danych:** `items` (produkty), `batches` (partie z datami ważności – stan produktu to ich suma),
 `history` (każda zmiana stanu: powód zakup/zużycie/wyrzucenie/korekta, kwota, kto), `receipts` i `receipt_aliases`
@@ -213,6 +217,7 @@ src/
   pharmacy.js – domowa apteka: leki, opakowania, podania, terminy po otwarciu
   calendar.js – kalendarz domowy: wpisy wspólne i prywatne, powtarzanie
   integrations.js – klucze API, osadzanie w HA/Domoticzu, podsumowanie dla czujników
+  telemetry.js, metrics.js – OpenTelemetry: ślady, metryki i logi (Zabbix 8 APM)
   cli.js      – narzędzia administracyjne (reset hasła, lista kont)
   products.js – podpowiedzi produktów po kodzie (Open Food Facts + cache)
   images.js   – pobieranie i przechowywanie zdjęć produktów
@@ -264,6 +269,7 @@ tools/preview/ – podgląd w przeglądarce: serwer + PostgreSQL (PGlite) w jedn
 | POST | `/api/equipment/:id/documents?kind=warranty&name=plik.pdf` | Wysłanie pliku (treść żądania = plik) |
 | GET | `/api/documents/:id/file` | Pobranie dokumentu |
 | PATCH / DELETE | `/api/documents/:id` | Zmiana nazwy/rodzaju / usunięcie |
+| GET | `/api/health` | Stan aplikacji i bazy (bez logowania; 503 gdy baza nie odpowiada) |
 | GET | `/api/integration/summary` | Stan domu dla wtyczek (liczniki, zakupy, terminy, leki, wpisy na dziś) |
 | GET / POST / DELETE | `/api/tokens`, `/api/tokens/:id` | Klucze API (`Authorization: Bearer hm_…`) – tylko po zalogowaniu hasłem |
 | GET / PUT | `/api/settings/embed` | Adresy, które mogą osadzać aplikację w ramce (zmiana – administrator) |
@@ -282,7 +288,7 @@ tools/preview/ – podgląd w przeglądarce: serwer + PostgreSQL (PGlite) w jedn
 | POST | `/api/auth/password` | Zmiana własnego hasła |
 | GET / POST / PATCH / DELETE | `/api/users`, `/api/users/:id` | Domownicy (zmiany – administrator) |
 
-Wszystkie ścieżki `/api/*` poza `auth/status`, `auth/setup` i `auth/login` wymagają zalogowania.
+Wszystkie ścieżki `/api/*` poza `health`, `auth/status`, `auth/setup` i `auth/login` wymagają zalogowania.
 
 Przykład:
 

@@ -1,5 +1,8 @@
 'use strict';
 
+// OpenTelemetry musi wystartować przed załadowaniem http i pg (inaczej nie śledzi żądań i zapytań).
+require('./telemetry').startIfEnabled();
+
 const http = require('node:http');
 const path = require('node:path');
 const { Store, DEFAULT_URL } = require('./db');
@@ -40,6 +43,18 @@ async function main() {
       }
       console.log(`Czekam na PostgreSQL… (${attempt}/10: ${err.code || err.message})`);
       await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+
+  // Stan domu (produkty, terminy, leki, wydatki, połączenia z bazą) jako metryki OpenTelemetry.
+  require('./metrics').observeStore(store);
+  if (require('./telemetry').isEnabled()) {
+    const env = process.env;
+    if (env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+      console.log(`OpenTelemetry: wysyłam do ${env.OTEL_EXPORTER_OTLP_ENDPOINT} (${env.OTEL_EXPORTER_OTLP_PROTOCOL || 'http/protobuf'})`);
+    }
+    if (/prometheus/.test(env.OTEL_METRICS_EXPORTER ?? '')) {
+      console.log(`OpenTelemetry: metryki Prometheus na porcie ${env.OTEL_EXPORTER_PROMETHEUS_PORT || 9464} (/metrics)`);
     }
   }
 
