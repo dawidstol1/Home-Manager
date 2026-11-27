@@ -1,0 +1,528 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+  - uuid: 32f76e1495cc564586f7b32e3589fe33
+    name: Templates/Applications
+  templates:
+  - uuid: 0fa6f9dc8c805c39bd8f287721e43788
+    template: Zasoby domowe by HTTP
+    name: Zasoby domowe by HTTP
+    description: 'Zasoby domowe (Home-Manager): stan aplikacji (/api/health) i metryki OpenTelemetry w formacie Prometheus (/metrics). Nie wymaga ClickHouse ani proxy APM. Instrukcja: docs/MONITOROWANIE-ZABBIX.md'
+    groups:
+    - name: Templates/Applications
+    items:
+    - uuid: e4a4f6a8c5bd5b31b68d163c5521dd84
+      name: 'Health: raw'
+      type: HTTP_AGENT
+      key: home_manager.health.raw
+      delay: '{$HM.INTERVAL}'
+      history: '0'
+      value_type: TEXT
+      trends: '0'
+      url: '{$HM.URL}/api/health'
+      status_codes: 200,503
+      timeout: 10s
+      description: Odpowiedź /api/health (bez logowania). 503 = baza nie odpowiada.
+      tags:
+      - tag: component
+        value: health
+    - uuid: 5fd953a2b5c954c884cbcb5402d667af
+      name: 'Aplikacja: stan'
+      type: DEPENDENT
+      key: home_manager.health.status
+      delay: '0'
+      value_type: CHAR
+      trends: '0'
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.status
+      master_item:
+        key: home_manager.health.raw
+      tags:
+      - tag: component
+        value: health
+      triggers:
+      - uuid: aacf336e306b5ade8560e6d9e98180b9
+        expression: last(/Zasoby domowe by HTTP/home_manager.health.status)<>"ok"
+        name: 'Zasoby domowe: aplikacja albo baza danych nie działa'
+        priority: HIGH
+        description: /api/health nie zwraca „ok” – sprawdź `systemctl status home-manager` i połączenie z PostgreSQL.
+      - uuid: 096c8f5acad25e1290acd3780a999f92
+        expression: nodata(/Zasoby domowe by HTTP/home_manager.health.status,{$HM.NODATA})=1
+        name: 'Zasoby domowe: aplikacja nie odpowiada'
+        priority: HIGH
+        description: Brak odpowiedzi z {$HM.URL}/api/health – usługa zatrzymana albo brak połączenia.
+    - uuid: e1421ceb62f25d019ef79c4769a27196
+      name: 'Aplikacja: wersja'
+      type: DEPENDENT
+      key: home_manager.version
+      delay: '0'
+      value_type: CHAR
+      trends: '0'
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.version
+        error_handler: DISCARD_VALUE
+      - type: DISCARD_UNCHANGED_HEARTBEAT
+        parameters:
+        - 1d
+      master_item:
+        key: home_manager.health.raw
+      tags:
+      - tag: component
+        value: health
+    - uuid: c4e1cbd563195712ae33c5999de62617
+      name: 'Baza danych: czas odpowiedzi'
+      type: DEPENDENT
+      key: home_manager.db.response
+      delay: '0'
+      value_type: FLOAT
+      units: s
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.database_ms
+        error_handler: DISCARD_VALUE
+      - type: MULTIPLIER
+        parameters:
+        - '0.001'
+      master_item:
+        key: home_manager.health.raw
+      tags:
+      - tag: component
+        value: database
+      triggers:
+      - uuid: 1828d09fe44b5c14a2e0faa30a124cdb
+        expression: min(/Zasoby domowe by HTTP/home_manager.db.response,5m)>{$HM.DB.SLOW}
+        name: 'Zasoby domowe: baza danych odpowiada wolno (ponad {$HM.DB.SLOW} s)'
+        priority: WARNING
+        description: ''
+    - uuid: 9f7fb7daaaf054cb90471e9741639a29
+      name: 'Metrics: raw'
+      type: HTTP_AGENT
+      key: home_manager.metrics
+      delay: '{$HM.INTERVAL}'
+      history: '0'
+      value_type: TEXT
+      trends: '0'
+      url: '{$HM.METRICS.URL}'
+      timeout: 10s
+      description: Metryki aplikacji w formacie Prometheus (OTEL_METRICS_EXPORTER=prometheus, port 9464).
+      tags:
+      - tag: component
+        value: raw
+    - uuid: e5f2b4d2c0d85dc59d205ad8c6788ed5
+      name: 'Baza danych: dostępna'
+      type: DEPENDENT
+      key: home_manager.db.up
+      delay: '0'
+      value_type: UNSIGNED
+      description: ''
+      preprocessing:
+      - type: PROMETHEUS_PATTERN
+        parameters:
+        - home_manager_db_up
+        - value
+        - ''
+      master_item:
+        key: home_manager.metrics
+      tags:
+      - tag: component
+        value: database
+      triggers:
+      - uuid: f3c97af1f9e15209ba1f984ea8b20c88
+        expression: max(/Zasoby domowe by HTTP/home_manager.db.up,3m)=0
+        name: 'Zasoby domowe: brak połączenia z bazą danych'
+        priority: HIGH
+        description: ''
+    - uuid: 5c5507771edc5c3a8bd4df34b09aeee5
+      name: 'Baza danych: zapytania czekające na połączenie'
+      type: DEPENDENT
+      key: home_manager.db.pool.waiting
+      delay: '0'
+      value_type: UNSIGNED
+      description: ''
+      preprocessing:
+      - type: PROMETHEUS_PATTERN
+        parameters:
+        - home_manager_db_pool_connections{state="waiting"}
+        - value
+        - ''
+      master_item:
+        key: home_manager.metrics
+      tags:
+      - tag: component
+        value: database
+      triggers:
+      - uuid: 8e320c6b92d157f9b28a6db05bfcbb4c
+        expression: min(/Zasoby domowe by HTTP/home_manager.db.pool.waiting,5m)>5
+        name: 'Zasoby domowe: za mało połączeń z bazą'
+        priority: AVERAGE
+        description: ''
+    - uuid: d0f2ad90e1cd5e49ad2c59165fda8a57
+      name: 'HTTP: żądania na sekundę'
+      type: DEPENDENT
+      key: home_manager.http.requests
+      delay: '0'
+      value_type: FLOAT
+      description: ''
+      preprocessing:
+      - type: PROMETHEUS_PATTERN
+        parameters:
+        - http_server_request_duration_count
+        - function
+        - sum
+        error_handler: CUSTOM_VALUE
+        error_handler_params: '0'
+      - type: CHANGE_PER_SECOND
+      master_item:
+        key: home_manager.metrics
+      tags:
+      - tag: component
+        value: http
+      units: rps
+    - uuid: 485cfc791f6e538fbf71d24d4249716e
+      name: 'Logowania: nieudane (na sekundę)'
+      type: DEPENDENT
+      key: home_manager.login.failed
+      delay: '0'
+      value_type: FLOAT
+      description: ''
+      preprocessing:
+      - type: PROMETHEUS_PATTERN
+        parameters:
+        - home_manager_login_attempts_total{result="failure"}
+        - value
+        - ''
+        error_handler: CUSTOM_VALUE
+        error_handler_params: '0'
+      - type: CHANGE_PER_SECOND
+      master_item:
+        key: home_manager.metrics
+      tags:
+      - tag: component
+        value: security
+    - uuid: 62ea779f3a2c5ad28d67ef513e37de40
+      name: 'Logowania: zablokowane (na sekundę)'
+      type: DEPENDENT
+      key: home_manager.login.blocked
+      delay: '0'
+      value_type: FLOAT
+      description: ''
+      preprocessing:
+      - type: PROMETHEUS_PATTERN
+        parameters:
+        - home_manager_login_attempts_total{result="blocked"}
+        - value
+        - ''
+        error_handler: CUSTOM_VALUE
+        error_handler_params: '0'
+      - type: CHANGE_PER_SECOND
+      master_item:
+        key: home_manager.metrics
+      tags:
+      - tag: component
+        value: security
+      triggers:
+      - uuid: 7a8607c490dd5e009ad0f737d690538e
+        expression: max(/Zasoby domowe by HTTP/home_manager.login.blocked,15m)>0
+        name: 'Zasoby domowe: zablokowano logowania – ktoś zgaduje hasła?'
+        priority: AVERAGE
+        description: Po 10 nieudanych próbach dla konta albo 50 dla adresu aplikacja blokuje logowanie na 15 minut.
+        manual_close: 'YES'
+    - uuid: 6d98480ada9b523790020ffdf4f2b8d6
+      name: 'Zasoby: produkty'
+      type: DEPENDENT
+      key: home_manager.items
+      delay: '0'
+      value_type: UNSIGNED
+      description: ''
+      preprocessing:
+      - type: PROMETHEUS_PATTERN
+        parameters:
+        - home_manager_items
+        - value
+        - ''
+      master_item:
+        key: home_manager.metrics
+      tags:
+      - tag: component
+        value: home
+    - uuid: ccbefa7db906571a937fd33dddecb7aa
+      name: 'Zasoby: do kupienia'
+      type: DEPENDENT
+      key: home_manager.items.low_stock
+      delay: '0'
+      value_type: UNSIGNED
+      description: ''
+      preprocessing:
+      - type: PROMETHEUS_PATTERN
+        parameters:
+        - home_manager_items_low_stock
+        - value
+        - ''
+      master_item:
+        key: home_manager.metrics
+      tags:
+      - tag: component
+        value: home
+      triggers:
+      - uuid: af6a01f4685059cebf03e4917b071be2
+        expression: last(/Zasoby domowe by HTTP/home_manager.items.low_stock)>0
+        name: 'Zasoby domowe: do kupienia {ITEM.LASTVALUE} poz.'
+        priority: INFO
+        description: ''
+    - uuid: a44b0adaa15f54ca8bf0b34536198b67
+      name: 'Zasoby: po terminie'
+      type: DEPENDENT
+      key: home_manager.items.expired
+      delay: '0'
+      value_type: UNSIGNED
+      description: ''
+      preprocessing:
+      - type: PROMETHEUS_PATTERN
+        parameters:
+        - home_manager_items_expired
+        - value
+        - ''
+      master_item:
+        key: home_manager.metrics
+      tags:
+      - tag: component
+        value: home
+      triggers:
+      - uuid: d8854e7368a4539d87df80253be2820b
+        expression: last(/Zasoby domowe by HTTP/home_manager.items.expired)>0
+        name: 'Zasoby domowe: produkty po terminie ({ITEM.LASTVALUE})'
+        priority: WARNING
+        description: ''
+    - uuid: e96510d9363b511ba64779502dc1ab0d
+      name: 'Zasoby: tracą ważność w 7 dni'
+      type: DEPENDENT
+      key: home_manager.items.expiring
+      delay: '0'
+      value_type: UNSIGNED
+      description: ''
+      preprocessing:
+      - type: PROMETHEUS_PATTERN
+        parameters:
+        - home_manager_items_expiring_soon
+        - value
+        - ''
+      master_item:
+        key: home_manager.metrics
+      tags:
+      - tag: component
+        value: home
+    - uuid: 95ca712b722d52e4aa8ee7191e546d5a
+      name: 'Apteka: leki'
+      type: DEPENDENT
+      key: home_manager.medicines
+      delay: '0'
+      value_type: UNSIGNED
+      description: ''
+      preprocessing:
+      - type: PROMETHEUS_PATTERN
+        parameters:
+        - home_manager_medicines
+        - value
+        - ''
+      master_item:
+        key: home_manager.metrics
+      tags:
+      - tag: component
+        value: pharmacy
+    - uuid: 1354ec68373f5d12b5601986a6b73780
+      name: 'Apteka: leki po terminie'
+      type: DEPENDENT
+      key: home_manager.medicines.expired
+      delay: '0'
+      value_type: UNSIGNED
+      description: ''
+      preprocessing:
+      - type: PROMETHEUS_PATTERN
+        parameters:
+        - home_manager_medicines_expired
+        - value
+        - ''
+      master_item:
+        key: home_manager.metrics
+      tags:
+      - tag: component
+        value: pharmacy
+      triggers:
+      - uuid: 9c6bc23ed5de59a1aa6300e8bfc33ece
+        expression: last(/Zasoby domowe by HTTP/home_manager.medicines.expired)>0
+        name: 'Zasoby domowe: leki po terminie ({ITEM.LASTVALUE}) – oddaj w aptece'
+        priority: WARNING
+        description: ''
+    - uuid: 43c91a727dcf5889acae214d98cc7b56
+      name: 'Apteka: kończy się termin'
+      type: DEPENDENT
+      key: home_manager.medicines.expiring
+      delay: '0'
+      value_type: UNSIGNED
+      description: ''
+      preprocessing:
+      - type: PROMETHEUS_PATTERN
+        parameters:
+        - home_manager_medicines_expiring
+        - value
+        - ''
+      master_item:
+        key: home_manager.metrics
+      tags:
+      - tag: component
+        value: pharmacy
+    - uuid: c4b3e8901e8251b39680b7a1b10b275e
+      name: 'Apteka: mało lub brak'
+      type: DEPENDENT
+      key: home_manager.medicines.low
+      delay: '0'
+      value_type: UNSIGNED
+      description: ''
+      preprocessing:
+      - type: PROMETHEUS_PATTERN
+        parameters:
+        - home_manager_medicines_low
+        - value
+        - ''
+      master_item:
+        key: home_manager.metrics
+      tags:
+      - tag: component
+        value: pharmacy
+      triggers:
+      - uuid: 8addcb72f90d52199f0118706d3031f2
+        expression: last(/Zasoby domowe by HTTP/home_manager.medicines.low)>0
+        name: 'Zasoby domowe: kończą się leki ({ITEM.LASTVALUE})'
+        priority: INFO
+        description: ''
+    - uuid: 764ffe70f41c5650bf8bb3a1aeb62278
+      name: 'Sprzęty: gwarancje i przeglądy'
+      type: DEPENDENT
+      key: home_manager.equipment
+      delay: '0'
+      value_type: UNSIGNED
+      description: ''
+      preprocessing:
+      - type: PROMETHEUS_PATTERN
+        parameters:
+        - home_manager_equipment_attention
+        - value
+        - ''
+      master_item:
+        key: home_manager.metrics
+      tags:
+      - tag: component
+        value: equipment
+      triggers:
+      - uuid: 8e3eaf656aad5403b40cc7e903c48fa0
+        expression: last(/Zasoby domowe by HTTP/home_manager.equipment)>0
+        name: 'Zasoby domowe: gwarancje lub przeglądy do sprawdzenia ({ITEM.LASTVALUE})'
+        priority: INFO
+        description: ''
+    - uuid: caa6d955de9450e98e7c9225cddc53ce
+      name: 'Wydatki: bieżący miesiąc'
+      type: DEPENDENT
+      key: home_manager.spent
+      delay: '0'
+      value_type: FLOAT
+      description: ''
+      preprocessing:
+      - type: PROMETHEUS_PATTERN
+        parameters:
+        - home_manager_spent_month
+        - value
+        - ''
+      master_item:
+        key: home_manager.metrics
+      tags:
+      - tag: component
+        value: expenses
+      units: PLN
+    - uuid: e7628abe544b5cadb8406b592078b955
+      name: 'Zmarnowane: bieżący miesiąc'
+      type: DEPENDENT
+      key: home_manager.wasted
+      delay: '0'
+      value_type: FLOAT
+      description: ''
+      preprocessing:
+      - type: PROMETHEUS_PATTERN
+        parameters:
+        - home_manager_wasted_month
+        - value
+        - ''
+      master_item:
+        key: home_manager.metrics
+      tags:
+      - tag: component
+        value: expenses
+      units: PLN
+    macros:
+    - macro: '{$HM.URL}'
+      value: http://192.168.1.30:3000
+      description: Adres aplikacji (bez / na końcu)
+    - macro: '{$HM.METRICS.URL}'
+      value: http://192.168.1.30:9464/metrics
+      description: Adres metryk Prometheus
+    - macro: '{$HM.INTERVAL}'
+      value: 1m
+      description: Co ile pobierać dane
+    - macro: '{$HM.NODATA}'
+      value: 5m
+      description: Po jakim czasie bez odpowiedzi alarm
+    - macro: '{$HM.DB.SLOW}'
+      value: '0.5'
+      description: Próg wolnej bazy (sekundy)
+  graphs:
+  - uuid: dfce719965115c6cac59fc84a4538700
+    name: 'Zasoby domowe: terminy'
+    graph_items:
+    - color: E53935
+      item:
+        host: Zasoby domowe by HTTP
+        key: home_manager.items.expired
+    - sortorder: '1'
+      color: FB8C00
+      item:
+        host: Zasoby domowe by HTTP
+        key: home_manager.items.expiring
+    - sortorder: '2'
+      color: 8E24AA
+      item:
+        host: Zasoby domowe by HTTP
+        key: home_manager.medicines.expired
+    - sortorder: '3'
+      color: 00897B
+      item:
+        host: Zasoby domowe by HTTP
+        key: home_manager.items.low_stock
+  - uuid: 15d999dd3dcb5db790eae19f600d98e7
+    name: 'Zasoby domowe: wydatki i zmarnowane'
+    graph_items:
+    - color: 3949AB
+      item:
+        host: Zasoby domowe by HTTP
+        key: home_manager.spent
+    - sortorder: '1'
+      color: F4511E
+      item:
+        host: Zasoby domowe by HTTP
+        key: home_manager.wasted
+  - uuid: d7c3affddfc05ad6b3b46382178816bd
+    name: 'Zasoby domowe: aplikacja'
+    graph_items:
+    - color: 1E88E5
+      item:
+        host: Zasoby domowe by HTTP
+        key: home_manager.http.requests
+    - sortorder: '1'
+      color: E53935
+      yaxisside: RIGHT
+      item:
+        host: Zasoby domowe by HTTP
+        key: home_manager.db.response

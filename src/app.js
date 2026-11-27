@@ -11,6 +11,8 @@ const { createFileStore, MAX_UPLOAD } = require('./files');
 const auth = require('./auth');
 const { toBarcode, ValidationError } = require('./db');
 const { isApiToken } = require('./integrations');
+const { record, nameRequest } = require('./metrics');
+const pkg = require('../package.json');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const MIME = {
@@ -145,16 +147,23 @@ function buildRoutes({ store, lookupProduct, images, files, limiter, ipLimiter, 
         // pomyłki jednej osoby nie mogą blokować pozostałych.
         const ip = auth.clientIp(req, cfg.trustProxy);
         const key = `${ip}|${String(body.login ?? '').trim().toLowerCase()}`;
-        limiter.check(key);
-        ipLimiter.check(ip);
+        try {
+          limiter.check(key);
+          ipLimiter.check(ip);
+        } catch (err) {
+          record.login('blocked');
+          throw err;
+        }
         const found = await store.findUserForLogin(body.login);
         const ok = found ? await auth.verifyPassword(body.password, found.password_hash) : (await auth.burnTime(body.password), false);
         if (!ok) {
           limiter.fail(key);
           ipLimiter.fail(ip);
+          record.login('failure');
           throw httpError(401, 'Nieprawidłowy login lub hasło');
         }
         limiter.reset(key);
+        record.login('success');
         const { password_hash: _h, ...user } = found;
         return startSession(user, req);
       },
@@ -169,6 +178,22 @@ function buildRoutes({ store, lookupProduct, images, files, limiter, ipLimiter, 
       { public: true },
     ],
     ['GET', /^\/api\/auth\/me$/, ({ user }) => user],
+    [
+      'GET', /^\/api\/health$/,
+      async () => {
+        const started = Date.now();
+        try {
+          await store.q('SELECT 1');
+        } catch (err) {
+          return { status: 503, body: { status: 'error', database: 'error', error: err.message, version: pkg.version } };
+        }
+        return {
+          status: 'ok', database: 'ok', database_ms: Date.now() - started,
+          version: pkg.version, uptime_s: Math.round(process.uptime()),
+        };
+      },
+      { public: true },
+    ],
     [
       'POST', /^\/api\/auth\/password$/,
       async ({ body, user, token }) => {
@@ -243,7 +268,11 @@ function buildRoutes({ store, lookupProduct, images, files, limiter, ipLimiter, 
     // Szybkie zużycie: zeskanowany kod → −1 z partii o najkrótszym terminie.
     [
       'POST', /^\/api\/consume$/,
-      (ctx) => store.consumeByBarcode(ctx.body.barcode, { reason: ctx.body.reason, quantity: ctx.body.quantity, ...uid(ctx) }),
+      async (ctx) => {
+        const res = await store.consumeByBarcode(ctx.body.barcode, { reason: ctx.body.reason, quantity: ctx.body.quantity, ...uid(ctx) });
+        record.stock(ctx.body.reason === 'wasted' ? 'wasted' : 'used');
+        return res;
+      },
     ],
     ['POST', /^\/api\/history\/(\d+)\/undo$/, ({ m }) => store.undoHistory(m[1])],
     ['POST', /^\/api\/expiry\/parse$/, ({ body }) => parseExpiry(String(body.text ?? '').slice(0, 5000))],
@@ -281,10 +310,14 @@ function buildRoutes({ store, lookupProduct, images, files, limiter, ipLimiter, 
     ['DELETE', /^\/api\/items\/(\d+)$/, ({ m }) => store.deleteItem(m[1])],
     [
       'POST', /^\/api\/items\/(\d+)\/adjust$/,
-      ({ m, body, user }) => store.adjustQuantity(m[1], body.delta, {
-        note: body.note, reason: body.reason, expires_at: body.expires_at, price: body.price,
-        total: body.total, batch_id: body.batch_id, userId: user.id,
-      }),
+      async ({ m, body, user }) => {
+        const res = await store.adjustQuantity(m[1], body.delta, {
+          note: body.note, reason: body.reason, expires_at: body.expires_at, price: body.price,
+          total: body.total, batch_id: body.batch_id, userId: user.id,
+        });
+        record.stock(body.reason || (Number(body.delta) > 0 ? 'purchase' : 'used'));
+        return res;
+      },
     ],
     ['GET', /^\/api\/items\/(\d+)\/history$/, ({ m }) => store.getHistory(m[1])],
     ['PATCH', /^\/api\/batches\/(\d+)$/, (ctx) => store.updateBatch(ctx.m[1], ctx.body, uid(ctx))],
@@ -325,7 +358,14 @@ function buildRoutes({ store, lookupProduct, images, files, limiter, ipLimiter, 
     ['PATCH', /^\/api\/medicines\/(\d+)$/, ({ m, body }) => store.updateMedicine(m[1], body)],
     ['DELETE', /^\/api\/medicines\/(\d+)$/, ({ m }) => store.deleteMedicine(m[1])],
     ['POST', /^\/api\/medicines\/(\d+)\/packs$/, async ({ m, body, user }) => ({ status: 201, body: await store.addMedicinePack(m[1], body, { userId: user.id }) })],
-    ['POST', /^\/api\/medicines\/(\d+)\/take$/, ({ m, body, user }) => store.takeMedicine(m[1], body, { userId: user.id })],
+    [
+      'POST', /^\/api\/medicines\/(\d+)\/take$/,
+      async ({ m, body, user }) => {
+        const res = await store.takeMedicine(m[1], body, { userId: user.id });
+        record.dose();
+        return res;
+      },
+    ],
     ['PATCH', /^\/api\/medicine-packs\/(\d+)$/, ({ m, body, user }) => store.updateMedicinePack(m[1], body, { userId: user.id })],
     ['DELETE', /^\/api\/medicine-packs\/(\d+)$/, ({ m, user }) => store.removeMedicinePack(m[1], { userId: user.id })],
     ['POST', /^\/api\/medicine-log\/(\d+)\/undo$/, ({ m }) => store.undoMedicineLog(m[1])],
@@ -436,6 +476,7 @@ function createApp(store, { productLookup, images, imagesDir, imageFetch, upload
     const route = matching.find(([method]) => method === req.method);
     if (!route) return send(res, 405, { error: 'Metoda niedozwolona' });
     const [, re, handle, opts = {}] = route;
+    nameRequest(req.method, re);
 
     try {
       const cred = auth.readToken(req);
