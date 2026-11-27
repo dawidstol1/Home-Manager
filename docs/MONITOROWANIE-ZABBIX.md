@@ -10,9 +10,90 @@ Aplikacja ma wbudowane **OpenTelemetry**. Wysyła:
 
 Bez konfiguracji telemetria jest wyłączona i nic nie kosztuje.
 
+Są dwa sposoby – wybierz jeden:
+
+| | **A. Bez ClickHouse** (zalecane w domu) | **B. Zabbix APM** |
+|---|---|---|
+| Co trzeba mieć | dowolny Zabbix (6.4, 7.x, 8.0) | Zabbix 8.0 + proxy z APM + baza **ClickHouse** |
+| Co widać | stan aplikacji i bazy, metryki, wykresy, alarmy | to samo + **ślady** każdego żądania i logi w sekcji APM |
+| Jak | gotowy szablon do zaimportowania | wysyłka OTLP/gRPC do proxy |
+
 ---
 
-## 1. Zabbix 8.0: proxy przyjmujące OpenTelemetry
+## A. Bez ClickHouse: szablon „Zasoby domowe by HTTP”
+
+Zabbix sam co minutę pobiera z aplikacji dwa adresy: `/api/health` (czy aplikacja i baza działają) i `/metrics`
+(metryki OpenTelemetry w formacie Prometheus). Nie trzeba proxy APM ani ClickHouse.
+
+### A1. Aplikacja: włącz metryki Prometheus
+
+W `/etc/home-manager/home-manager.env` na serwerze aplikacji dopisz:
+
+```bash
+OTEL_METRICS_EXPORTER=prometheus
+OTEL_EXPORTER_PROMETHEUS_PORT=9464
+```
+
+i uruchom ponownie:
+
+```bash
+cd /opt/home-manager && git pull && npm ci --omit=dev
+systemctl restart home-manager
+curl -s http://127.0.0.1:9464/metrics | grep home_manager_items
+curl -s http://127.0.0.1/api/health
+```
+
+Pierwsze `curl` pokaże np. `home_manager_items{…} 11`, drugie `{"status":"ok",…}`.
+
+Port 9464 nie wymaga logowania – w zaporze otwórz go tylko dla serwera (albo proxy) Zabbix:
+`ufw allow from ADRES_ZABBIX to any port 9464 proto tcp`.
+
+### A2. Zabbix: import szablonu
+
+1. Pobierz plik [`deploy/zabbix/zasoby-domowe-template.yaml`](../deploy/zabbix/zasoby-domowe-template.yaml)
+   (na GitHubie: przycisk *Download raw file*).
+2. Zabbix → **Zbieranie danych → Szablony → Importuj** → wybierz plik → **Importuj**.
+3. **Zbieranie danych → Hosty → Utwórz host**:
+   - Nazwa: `Zasoby domowe`, grupa np. `Applications`,
+   - Szablony: **Zasoby domowe by HTTP**,
+   - zakładka **Makra** – wpisz adresy aplikacji (tak, jak Zabbix je widzi):
+
+| Makro | Przykład | Opis |
+|---|---|---|
+| `{$HM.URL}` | `http://10.20.1.30` | adres aplikacji (przez nginx w kontenerze; bez `/` na końcu) |
+| `{$HM.METRICS.URL}` | `http://10.20.1.30:9464/metrics` | metryki Prometheus |
+| `{$HM.INTERVAL}` | `1m` | co ile pobierać |
+
+4. Po minucie: **Monitorowanie → Najnowsze dane** → host `Zasoby domowe`.
+
+### Co jest w szablonie
+
+**Pozycje:** stan aplikacji, wersja, czas odpowiedzi bazy, baza dostępna, połączenia czekające na bazę, żądania HTTP
+na sekundę, nieudane i zablokowane logowania, produkty / do kupienia / po terminie / tracące ważność, leki / po terminie /
+kończący się termin / mało, gwarancje i przeglądy, wydatki i zmarnowane w miesiącu (zł).
+
+**Wyzwalacze:**
+
+| Wyzwalacz | Ważność |
+|---|---|
+| aplikacja albo baza nie działa (`/api/health` ≠ ok) | Wysoka |
+| aplikacja nie odpowiada od 5 min | Wysoka |
+| brak połączenia z bazą przez 3 min | Wysoka |
+| za mało połączeń z bazą | Średnia |
+| zablokowano logowania (ktoś zgaduje hasła) | Średnia |
+| baza odpowiada wolno (> 0,5 s) | Ostrzeżenie |
+| produkty po terminie, leki po terminie | Ostrzeżenie |
+| do kupienia, kończą się leki, gwarancje i przeglądy | Informacja |
+
+**Wykresy:** terminy, wydatki i zmarnowane, ruch aplikacji i czas odpowiedzi bazy.
+
+Nie chcesz alarmów o domowych sprawach (np. „do kupienia”)? Wyłącz je w hoście: **Wyzwalacze** → zaznacz → *Wyłącz*.
+
+---
+
+## B. Zabbix 8.0 APM (z ClickHouse)
+
+### B1. Zabbix 8.0: proxy przyjmujące OpenTelemetry
 
 W Zabbix 8.0 dane OpenTelemetry (OTLP/gRPC) przyjmuje **proxy Zabbix z obsługą APM**, a zapisuje je baza **ClickHouse**.
 Instrukcja Zabbixa: [What's new 8.0](https://www.zabbix.com/documentation/8.0/en/manual/whatsnew) ·
@@ -25,7 +106,7 @@ W skrócie:
    (standardowo port **4317**).
 3. Sprawdź, że kontener z aplikacją widzi ten port: `nc -zv ADRES_PROXY 4317`.
 
-## 2. Aplikacja: dokąd wysyłać
+### B2. Aplikacja: dokąd wysyłać
 
 W `/etc/home-manager/home-manager.env` dopisz (adres proxy Zabbix zamiast `192.168.1.40`):
 
@@ -55,7 +136,7 @@ Inne przydatne zmienne (standard OpenTelemetry):
 | `OTEL_TRACES_EXPORTER`, `OTEL_LOGS_EXPORTER` | `otlp` | `none` wyłącza ślady albo logi |
 | `OTEL_SDK_DISABLED` | – | `true` wyłącza całą telemetrię |
 
-## 3. Zabbix: host i szablon
+### B3. Zabbix: host i szablon
 
 1. **Zbieranie danych → Hosty → Utwórz host**: nazwa np. `Zasoby domowe`, monitorowany przez proxy z punktu 1.
 2. Dołącz szablon **Generic OpenTelemetry by OTLP** (wbudowany w Zabbix 8.0).
@@ -64,7 +145,7 @@ Inne przydatne zmienne (standard OpenTelemetry):
 4. Własne wykresy i wyzwalacze z metryk aplikacji tworzysz pozycjami typu **telemetry query** (nowy typ w 8.0)
    – nazwy metryk niżej.
 
-### Metryki aplikacji
+#### Metryki aplikacji
 
 | Metryka | Co mierzy | Przykładowy wyzwalacz |
 |---|---|---|
@@ -86,38 +167,4 @@ Stan domu odczytywany jest najczęściej co 30 s, więc obciążenie bazy jest p
 
 ---
 
-## 4. Prosty test „czy działa” (każda wersja Zabbixa)
-
-Niezależnie od APM aplikacja ma adres **`/api/health`** (bez logowania):
-
-```json
-{"status":"ok","database":"ok","database_ms":2,"version":"1.0.0","uptime_s":3600}
-```
-
-Gdy baza nie odpowiada – kod **503** i `"status":"error"`.
-
-W Zabbix: host `Zasoby domowe` → **Pozycje → Utwórz pozycję**:
-- Typ: **HTTP agent**, klucz `home_manager.health`, URL `http://ADRES_APLIKACJI:3000/api/health`
-  (albo `https://twoja-domena/api/health`), interwał `1m`,
-- Kody statusu: `200,503`, Typ informacji: **Tekst**,
-- Wstępne przetwarzanie: **JSONPath** `$.status`.
-
-Wyzwalacz: `last(/Zasoby domowe/home_manager.health)<>"ok"` – ważność **Wysoka**
-(oraz `nodata(/Zasoby domowe/home_manager.health,5m)=1` – aplikacja nie odpowiada wcale).
-
-## 5. Bez proxy APM: metryki w formacie Prometheus
-
-Jeśli wolisz zwykłe pozycje Zabbixa (działa też w Zabbix 6/7), włącz dodatkowo endpoint Prometheus:
-
-```bash
-OTEL_METRICS_EXPORTER=otlp,prometheus      # albo samo: prometheus
-OTEL_EXPORTER_PROMETHEUS_PORT=9464
-OTEL_EXPORTER_PROMETHEUS_HOST=0.0.0.0      # nasłuch dla Zabbixa (domyślnie wszystkie interfejsy)
-```
-
-Metryki są wtedy pod `http://ADRES_APLIKACJI:9464/metrics`, z kropkami zamienionymi na podkreślenia
-(`home_manager_items_expired`, `home_manager_db_up`…). W Zabbix: pozycja **HTTP agent** z tym adresem
-(Typ informacji: Tekst) + pozycje zależne z przetwarzaniem **Prometheus pattern**, np. `home_manager_items_expired`.
-
-Port 9464 nie wymaga logowania – w zaporze otwórz go tylko dla serwera/proxy Zabbix:
-`ufw allow from ADRES_ZABBIX to any port 9464 proto tcp`.
+Oba sposoby można łączyć: `OTEL_METRICS_EXPORTER=otlp,prometheus` wysyła metryki do APM i jednocześnie wystawia `/metrics`.

@@ -34,6 +34,12 @@ let sdk = null;
 
 function startIfEnabled(env = process.env) {
   if (sdk || !isEnabled(env)) return null;
+  // Same metryki Prometheus (bez odbiorcy OTLP, np. Zabbix bez ClickHouse): nie próbuj wysyłać śladów i logów donikąd.
+  const hasOtlp = env.OTEL_EXPORTER_OTLP_ENDPOINT || env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT || env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT;
+  if (!hasOtlp) {
+    env.OTEL_TRACES_EXPORTER ??= 'none';
+    env.OTEL_LOGS_EXPORTER ??= 'none';
+  }
   const { NodeSDK } = require('@opentelemetry/sdk-node');
   const { HttpInstrumentation } = require('@opentelemetry/instrumentation-http');
   const { PgInstrumentation } = require('@opentelemetry/instrumentation-pg');
